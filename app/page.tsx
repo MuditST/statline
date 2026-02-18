@@ -135,7 +135,7 @@ export default function Home() {
             const pdfBody = isUsingCustom
                 ? effectivePlatform === 'wmt'
                     ? { wmtStatsPageUrl: statsUrlToFetch, sport: selectedSport }
-                    : { url: statsUrlToFetch }
+                    : { url: statsUrlToFetch, sport: selectedSport }
                 : { schoolId: selectedSchool, sport: selectedSport };
 
             const pdfRes = await fetch('/api/pdf', {

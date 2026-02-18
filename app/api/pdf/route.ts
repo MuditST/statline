@@ -46,12 +46,45 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        let statsUrl: string;
+        // ===== Custom URL (no school config) =====
+        if (url && !schoolId) {
+            // If sport is provided, route to sport-specific parser
+            if (sport) {
+                if (sport === 'mens-soccer' || sport === 'womens-soccer') {
+                    const { parseSoccerPdf } = await import('@/lib/parsers/soccer');
+                    const { players, goalies } = await parseSoccerPdf(url);
+                    return NextResponse.json({ success: true, type: 'soccer', data: { players, goalies } });
+                }
+                if (sport === 'mens-basketball' || sport === 'womens-basketball') {
+                    const { parseBasketballPdf } = await import('@/lib/parsers/basketball');
+                    const { players } = await parseBasketballPdf(url);
+                    return NextResponse.json({ success: true, type: 'basketball', data: { players } });
+                }
+                if (sport === 'womens-volleyball') {
+                    const { parseVolleyballPdf } = await import('@/lib/parsers/volleyball');
+                    const { players } = await parseVolleyballPdf(url);
+                    return NextResponse.json({ success: true, type: 'volleyball', data: { players } });
+                }
+                if (sport === 'football') {
+                    const { parseFootballPdf } = await import('@/lib/parsers/football');
+                    const { players } = await parseFootballPdf(url);
+                    return NextResponse.json({ success: true, type: 'football', data: { players } });
+                }
+            }
 
-        // Use provided URL directly, or auto-generate from school config
-        if (url) {
-            statsUrl = url;
-        } else if (schoolId && sport) {
+            // Default: parse as baseball/softball PDF
+            const text = await fetchAndParsePdf(url);
+            const { parsePdfStats } = await import('@/lib/parsers/baseball');
+            const { batting, pitching } = parsePdfStats(text);
+            return NextResponse.json({
+                success: true,
+                type: 'baseball',
+                data: { batting, pitching },
+            });
+        }
+
+        // ===== Configured school =====
+        if (schoolId && sport) {
             const school = getSchoolById(schoolId);
             if (!school) {
                 return NextResponse.json<PdfResponse>(
@@ -273,22 +306,13 @@ export async function POST(request: NextRequest) {
                 { success: false, error: 'Could not find valid stats PDF for this school/sport' },
                 { status: 404 }
             );
-        } else if (url) {
-            // Custom URL — parse and return structured data for baseball/softball
-            const text = await fetchAndParsePdf(url);
-            const { parsePdfStats } = await import('@/lib/parsers/baseball');
-            const { batting, pitching } = parsePdfStats(text);
-            return NextResponse.json({
-                success: true,
-                type: 'baseball',
-                data: { batting, pitching },
-            });
-        } else {
-            return NextResponse.json<PdfResponse>(
-                { success: false, error: 'Missing URL or schoolId/sport parameters' },
-                { status: 400 }
-            );
         }
+
+        // No valid parameters provided
+        return NextResponse.json<PdfResponse>(
+            { success: false, error: 'Missing URL or schoolId/sport parameters' },
+            { status: 400 }
+        );
 
     } catch (error) {
         console.error('PDF fetch error:', error);
