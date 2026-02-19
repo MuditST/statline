@@ -138,7 +138,6 @@ export class FootballParser {
 
             try {
                 if (currentSection === 'Rushing') {
-                    // 9 Simmons, Jordon 12 97 562 19 543 5.6 2 92 45.25
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+\.?\d*)\s+(\d+)\s+(\d+)\s+(-?\d+\.?\d*)/);
                     if (match) {
                         const [_, jersey, name, gp, att, gain, loss, net, avg, td, long, avgg] = match;
@@ -155,7 +154,6 @@ export class FootballParser {
                         };
                     }
                 } else if (currentSection === 'Passing') {
-                    // 8 Brown, Cameran 10 145.82 120-185-1 64.86 % 1296 13 70 129.60
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(\d+)\s+(\d+\.?\d*)\s+(\d+)-(\d+)-(\d+)\s/);
                     if (match) {
                         const [_, jersey, name, gp, rating, comp, att, int] = match;
@@ -177,7 +175,6 @@ export class FootballParser {
                         }
                     }
                 } else if (currentSection === 'Receiving') {
-                    // 1 Hurst, Ted 12 71 1004 14.14 6 70 83.67
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+\.?\d*)\s+(\d+)\s+(\d+)\s+(-?\d+\.?\d*)/);
                     if (match) {
                         const [_, jersey, name, gp, no, yds, avg, td, long, avgg] = match;
@@ -192,7 +189,6 @@ export class FootballParser {
                         };
                     }
                 } else if (currentSection === 'Defense') {
-                    // 25 Robinson, Josiah 12 42 54 96.0 8.0-24 2.0-12 — 1 1 1-0 — — —
                     // This is hard to regex because of dashes and "—".
                     // Strategy: Extract Number + Name + GP, then split the rest.
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(\d+)\s+/);
@@ -223,7 +219,6 @@ export class FootballParser {
                         }
                     }
                 } else if (currentSection === 'Punting') {
-                    // 91 Chandley, Reed 54 2474 45.81 62 2 8 21 22 0
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(\d+)\s+/);
                     if (match) {
                         const [_, jersey, name, no] = match;
@@ -246,7 +241,6 @@ export class FootballParser {
                         }
                     }
                 } else if (currentSection === 'FieldGoals') {
-                    // 92 Rickman, Liam 5-9 55.56 % 0-0 1-2 3-4 1-3 0-0 47 1
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(\d+)-(\d+)\s+(\d+\.?\d*)\s+%/);
                     if (match) {
                         const [_, jersey, name, fgm, fga, pct] = match;
@@ -269,8 +263,6 @@ export class FootballParser {
                         }
                     }
                 } else if (currentSection === 'Scoring') {
-                    // 92 Rickman, Liam — 5 13-13 — — — — — 28
-                    // 1 Hurst, Ted 6 — — — — — — — 36
                     // Match jersey, then name (until we hit digit or em-dash)
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(?=\d|—)/);
                     if (match) {
@@ -291,7 +283,6 @@ export class FootballParser {
                         }
                     }
                 } else if (currentSection === 'PuntReturns') {
-                    // 5 Robinson, Javon 8 10 1.25 0 6
                     // Cols: NO YRDS AVG TD LG
                     // Match jersey, then name (until we hit a digit)
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(?=\d)/);
@@ -311,7 +302,6 @@ export class FootballParser {
                         }
                     }
                 } else if (currentSection === 'KickReturns') {
-                    // 21 Peyton, TJ 20 364 18.20 0 34
                     // Cols: NO YRDS AVG TD LG
                     // Match jersey, then name (until we hit a digit)
                     const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(?=\d)/);

@@ -37,7 +37,7 @@ interface SchoolComboboxProps {
     value: string;
     onValueChange: (value: string) => void;
     sport: SportType;
-    onEditSchool?: (school: { name: string; rosterUrl: string; statsUrl: string }) => void;
+    onEditSchool?: (school: { name: string; rosterUrl: string; statsUrl: string; platform?: 'gtech' | 'wmt' }) => void;
     onSchoolDeleted?: () => void;
 }
 
@@ -145,6 +145,7 @@ export function SchoolCombobox({
                 name: selectedSchool.name,
                 rosterUrl: selectedSchool.rosterUrl,
                 statsUrl: selectedSchool.statsUrl,
+                platform: selectedSchool.platform,
             });
         }
     };

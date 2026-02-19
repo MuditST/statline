@@ -63,11 +63,12 @@ export default function Home() {
     const StatsViewComponent = sportConfig.StatsViewComponent;
 
     // Handle editing a school from the info popover
-    const handleEditSchool = useCallback((school: { name: string; rosterUrl: string; statsUrl: string }) => {
+    const handleEditSchool = useCallback((school: { name: string; rosterUrl: string; statsUrl: string; platform?: 'gtech' | 'wmt' }) => {
         setUseCustomUrls(true);
         setCustomSchoolName(school.name);
         setCustomRosterUrl(school.rosterUrl);
         setCustomStatsUrl(school.statsUrl);
+        setCustomPlatform(school.platform === 'wmt' ? 'wmt' : 'sidearm');
     }, []);
 
     // Handle school deletion callback
