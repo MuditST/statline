@@ -28,6 +28,23 @@ interface BasketballStatsViewProps extends StatsViewProps {
     } | null;
 }
 
+/** Format a decimal percentage string (e.g. ".452" or "0.452") to "45.2%" */
+function formatPct(pct: string | undefined): string {
+    if (!pct) return '';
+    const num = parseFloat(pct);
+    if (isNaN(num)) return pct;
+    return `${Math.floor(num * 100)}%`;
+}
+
+/** Calculate per-game stat, return formatted string */
+function perGame(total: number | undefined, gpGs: string | undefined): string {
+    if (total === undefined || total === 0 || !gpGs) return '0';
+    const gp = parseInt(gpGs);
+    if (!gp || gp === 0) return '0';
+    const avg = total / gp;
+    return avg % 1 === 0 ? avg.toString() : avg.toFixed(1);
+}
+
 export function BasketballStatsView({ roster, statsData, isLoading }: BasketballStatsViewProps) {
     const [activeTab, setActiveTab] = useState<'roster' | 'stats'>('roster');
     const { copied, copiedType, copyWithFeedback } = useCopyFeedback();
@@ -61,17 +78,16 @@ export function BasketballStatsView({ roster, statsData, isLoading }: Basketball
         if (!orderedData.length) return;
         const rows = orderedData.map(r => {
             const s = r.player?.stats;
-            const fg = s ? `${s.fgMade}-${s.fgAtt}` : '';
             return [
-                safeValue(s?.pts),
-                fg,
-                safeValue(s?.threeFgPct),
-                safeValue(s?.ftPct),
-                safeValue(s?.totReb),
-                safeValue(s?.ast),
-                safeValue(s?.blk),
-                safeValue(s?.stl),
-                safeValue(s?.min)
+                s?.ptsAvg || '',
+                formatPct(s?.fgPct),
+                formatPct(s?.threeFgPct),
+                formatPct(s?.ftPct),
+                s?.rebAvg || '',
+                perGame(s?.ast, s?.gpGs),
+                perGame(s?.blk, s?.gpGs),
+                perGame(s?.stl, s?.gpGs),
+                s?.minAvg || ''
             ].join('\t');
         });
         await copyWithFeedback(rows.join('\n'), 'Stats');
@@ -96,23 +112,22 @@ export function BasketballStatsView({ roster, statsData, isLoading }: Basketball
 
     const handleDownloadStats = () => {
         if (!orderedData.length) return;
-        const headers = ['Row', 'Jersey', 'Player Name', 'PTS', 'FG', '3PT%', 'FT%', 'REB', 'AST', 'BLK', 'STL', 'MIN'];
+        const headers = ['Row', 'Jersey', 'Player Name', 'PTS/G', 'FG%', '3PT%', 'FT%', 'REB/G', 'AST/G', 'BLK/G', 'STL/G', 'MIN/G'];
         const rows = orderedData.map(r => {
             const s = r.player?.stats;
-            const fg = s ? `="${s.fgMade}-${s.fgAtt}"` : '';
             return [
                 r.row,
                 r.displayJersey,
                 `"${r.player?.name || ''}"`,
-                safeValue(s?.pts),
-                fg,
-                safeValue(s?.threeFgPct),
-                safeValue(s?.ftPct),
-                safeValue(s?.totReb),
-                safeValue(s?.ast),
-                safeValue(s?.blk),
-                safeValue(s?.stl),
-                safeValue(s?.min)
+                s?.ptsAvg || '',
+                formatPct(s?.fgPct),
+                formatPct(s?.threeFgPct),
+                formatPct(s?.ftPct),
+                s?.rebAvg || '',
+                perGame(s?.ast, s?.gpGs),
+                perGame(s?.blk, s?.gpGs),
+                perGame(s?.stl, s?.gpGs),
+                s?.minAvg || ''
             ].join(',');
         });
         downloadCsv([headers.join(','), ...rows].join('\n'), 'basketball_stats');
@@ -274,7 +289,7 @@ export function BasketballStatsView({ roster, statsData, isLoading }: Basketball
                                     <TableHead className="w-16">Jersey</TableHead>
                                     <TableHead>Player Name</TableHead>
                                     <TableHead className="text-center">PTS</TableHead>
-                                    <TableHead className="text-center">FG</TableHead>
+                                    <TableHead className="text-center">FG %</TableHead>
                                     <TableHead className="text-center">3PT%</TableHead>
                                     <TableHead className="text-center">FT%</TableHead>
                                     <TableHead className="text-center">REB</TableHead>
@@ -303,15 +318,15 @@ export function BasketballStatsView({ roster, statsData, isLoading }: Basketball
                                             <TableCell className="py-1 font-mono text-xs text-muted-foreground">{row.row}</TableCell>
                                             <TableCell className="py-1 font-bold">{row.displayJersey}</TableCell>
                                             <TableCell className="py-1">{row.player?.name}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono">{s?.pts}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono text-xs">{s ? `${s.fgMade}-${s.fgAtt}` : ''}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono text-xs">{s?.threeFgPct}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono text-xs">{s?.ftPct}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono">{s?.totReb}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono">{s?.ast}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono">{s?.blk}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono">{s?.stl}</TableCell>
-                                            <TableCell className="py-1 text-center font-mono">{s?.min}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono">{s?.ptsAvg}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono text-xs">{formatPct(s?.fgPct)}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono text-xs">{formatPct(s?.threeFgPct)}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono text-xs">{formatPct(s?.ftPct)}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono">{s?.rebAvg}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono">{perGame(s?.ast, s?.gpGs)}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono">{perGame(s?.blk, s?.gpGs)}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono">{perGame(s?.stl, s?.gpGs)}</TableCell>
+                                            <TableCell className="py-1 text-center font-mono">{s?.minAvg}</TableCell>
                                         </TableRow>
                                     );
                                 })}

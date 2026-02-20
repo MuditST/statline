@@ -117,20 +117,42 @@ export class FootballParser {
         };
 
         for (const line of lines) {
-            const trimmed = line.trim();
+            let trimmed = line.trim();
             if (!trimmed) continue;
 
-            // Detect Section Headers
-            if (trimmed.includes('# Rushing')) { currentSection = 'Rushing'; continue; }
-            if (trimmed.includes('# Passing')) { currentSection = 'Passing'; continue; }
-            if (trimmed.includes('# Receiving')) { currentSection = 'Receiving'; continue; }
-            if (trimmed.includes('# Punt Returns')) { currentSection = 'PuntReturns'; continue; }
-            if (trimmed.includes('# Kick Returns')) { currentSection = 'KickReturns'; continue; }
-            if (trimmed.includes('# Interceptions')) { currentSection = 'Interceptions'; continue; } // Used for returns stats
-            if (trimmed.includes('# Scoring')) { currentSection = 'Scoring'; continue; }
-            if (trimmed.includes('# Field Goals')) { currentSection = 'FieldGoals'; continue; }
-            if (trimmed.includes('# Punting')) { currentSection = 'Punting'; continue; }
-            if (trimmed.includes('# Defensive Leaders') || trimmed.includes('Tackles Sacks Pass Defense')) { currentSection = 'Defense'; continue; }
+            // Check if a section header is embedded mid-line (data + "# Section" on the same line)
+            // This happens when PDF text extraction concatenates adjacent columns.
+            // e.g. "11 Gillon, Noah 4 71.03 17-39-2 43.59 % 175 0 34 43.75 # Kick Returns NO YRDS AVG TD LG"
+            // We need to process the data part FIRST, then switch sections.
+            const sectionHeaders = [
+                '# Rushing', '# Passing', '# Receiving', '# Punt Returns',
+                '# Kick Returns', '# Interceptions', '# Scoring',
+                '# Field Goals', '# Punting', '# Defensive Leaders',
+                '# Total Offense', '# All Purpose'
+            ];
+
+            let embeddedSection: string | null = null;
+            for (const header of sectionHeaders) {
+                const idx = trimmed.indexOf(header);
+                if (idx > 0) {
+                    // Section header is mid-line — split: process data before it
+                    embeddedSection = header;
+                    trimmed = trimmed.substring(0, idx).trim();
+                    break;
+                }
+            }
+
+            // Detect Section Headers (only when they start the line)
+            if (trimmed.startsWith('# Rushing') || trimmed === 'Rushing') { currentSection = 'Rushing'; continue; }
+            if (trimmed.startsWith('# Passing') || trimmed === 'Passing') { currentSection = 'Passing'; continue; }
+            if (trimmed.startsWith('# Receiving') || trimmed === 'Receiving') { currentSection = 'Receiving'; continue; }
+            if (trimmed.startsWith('# Punt Returns')) { currentSection = 'PuntReturns'; continue; }
+            if (trimmed.startsWith('# Kick Returns')) { currentSection = 'KickReturns'; continue; }
+            if (trimmed.startsWith('# Interceptions')) { currentSection = 'Interceptions'; continue; }
+            if (trimmed.startsWith('# Scoring')) { currentSection = 'Scoring'; continue; }
+            if (trimmed.startsWith('# Field Goals')) { currentSection = 'FieldGoals'; continue; }
+            if (trimmed.startsWith('# Punting')) { currentSection = 'Punting'; continue; }
+            if (trimmed.startsWith('# Defensive Leaders') || trimmed.includes('Tackles Sacks Pass Defense')) { currentSection = 'Defense'; continue; }
 
             // Skip headers that repeat or totals
             if (trimmed.startsWith('Total') || trimmed.startsWith('Opponents') || trimmed.startsWith('Team')) continue;
@@ -138,7 +160,8 @@ export class FootballParser {
 
             try {
                 if (currentSection === 'Rushing') {
-                    const match = trimmed.match(/^(\d+)\s+([A-Za-z\s.,'-]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+\.?\d*)\s+(\d+)\s+(\d+)\s+(-?\d+\.?\d*)/);
+                    // Match: jersey, name (greedy up to last alpha/punct before GP column), GP, ATT, GAIN, LOSS, NET, AVG, TD, LONG, AVG/G
+                    const match = trimmed.match(/^(\d+)\s+(.+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+\.?\d*)\s+(\d+)\s+(\d+)\s+(-?\d+\.?\d*)/);
                     if (match) {
                         const [_, jersey, name, gp, att, gain, loss, net, avg, td, long, avgg] = match;
                         const p = getOrCreatePlayer(jersey, name.trim());
@@ -323,6 +346,21 @@ export class FootballParser {
                 }
             } catch (e) {
                 // Ignore parse errors for single lines
+            }
+
+            // If we detected an embedded section header earlier, switch to that section now
+            // (after processing the data portion of the line above)
+            if (embeddedSection) {
+                if (embeddedSection.includes('Rushing')) currentSection = 'Rushing';
+                else if (embeddedSection.includes('Passing')) currentSection = 'Passing';
+                else if (embeddedSection.includes('Receiving')) currentSection = 'Receiving';
+                else if (embeddedSection.includes('Punt Returns')) currentSection = 'PuntReturns';
+                else if (embeddedSection.includes('Kick Returns')) currentSection = 'KickReturns';
+                else if (embeddedSection.includes('Interceptions')) currentSection = 'Interceptions';
+                else if (embeddedSection.includes('Scoring')) currentSection = 'Scoring';
+                else if (embeddedSection.includes('Field Goals')) currentSection = 'FieldGoals';
+                else if (embeddedSection.includes('Punting')) currentSection = 'Punting';
+                else if (embeddedSection.includes('Defensive')) currentSection = 'Defense';
             }
         }
 

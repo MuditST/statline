@@ -15,6 +15,7 @@ import { Toaster, toast } from 'sonner';
 import { SchoolCombobox } from '@/components/school-combobox';
 import { SportSelector } from '@/components/sport-selector';
 import { CustomUrlForm } from '@/components/custom-url-form';
+import { ModeToggle } from '@/components/mode-toggle';
 import { HelpCircle, Loader2 } from 'lucide-react';
 import { getSchoolById } from '@/config/schools';
 import { getSportConfig } from '@/lib/sports';
@@ -199,7 +200,7 @@ export default function Home() {
             <TooltipProvider>
                 <div className="min-h-screen bg-background">
                     {/* Header */}
-                    <header className="bg-card pt-8 pb-4">
+                    <header className="bg-background pt-8 pb-6">
                         <div className="container mx-auto flex items-center justify-center gap-3">
                             <img
                                 src="/logo.png"
@@ -236,6 +237,7 @@ export default function Home() {
                                             <p>Enable to enter custom roster and stats URLs</p>
                                         </TooltipContent>
                                     </Tooltip>
+                                    <ModeToggle />
                                 </div>
                             </CardHeader>
 
