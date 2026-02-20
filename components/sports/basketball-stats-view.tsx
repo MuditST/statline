@@ -38,9 +38,10 @@ function formatPct(pct: string | undefined): string {
 
 /** Calculate per-game stat, return formatted string */
 function perGame(total: number | undefined, gpGs: string | undefined): string {
-    if (total === undefined || total === 0 || !gpGs) return '0';
+    if (total === undefined || !gpGs) return '';
     const gp = parseInt(gpGs);
-    if (!gp || gp === 0) return '0';
+    if (!gp || gp === 0) return '';
+    if (total === 0) return '0';
     const avg = total / gp;
     return avg % 1 === 0 ? avg.toString() : avg.toFixed(1);
 }
