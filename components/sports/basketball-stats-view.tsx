@@ -21,6 +21,7 @@ import { downloadCsv, excelSafe, safeValue } from '@/lib/utils/export';
 import { yearToText } from '@/lib/utils/roster';
 import { createDisplayRows, isGapRow } from '@/lib/utils/display-rows';
 import { useCopyFeedback } from '@/lib/hooks/use-copy-feedback';
+import { getBasketballCatStats, formatCatValue } from '@/lib/basketball/cat-stats';
 
 interface BasketballStatsViewProps extends StatsViewProps {
     statsData: {
@@ -92,6 +93,37 @@ export function BasketballStatsView({ roster, statsData, isLoading }: Basketball
             ].join('\t');
         });
         await copyWithFeedback(rows.join('\n'), 'Stats');
+    };
+
+    const handleCopy3Cat = async () => {
+        if (!orderedData.length) return;
+        const rows = orderedData.map(r => {
+            const s = r.player?.stats;
+            if (!s) return ['', '', '', '', ''].join('\t');
+            const cats = getBasketballCatStats(s, 3);
+            return [
+                formatCatValue(cats[0]),
+                '', // highlight column
+                formatCatValue(cats[1]),
+                '', // highlight column
+                formatCatValue(cats[2]),
+            ].join('\t');
+        });
+        await copyWithFeedback(rows.join('\n'), '3 Cat');
+    };
+
+    const handleCopy2Cat = async () => {
+        if (!orderedData.length) return;
+        const rows = orderedData.map(r => {
+            const s = r.player?.stats;
+            if (!s) return ['', ''].join('\t');
+            const cats = getBasketballCatStats(s, 2);
+            return [
+                formatCatValue(cats[0]),
+                formatCatValue(cats[1]),
+            ].join('\t');
+        });
+        await copyWithFeedback(rows.join('\n'), '2 Cat');
     };
 
     const handleDownloadRoster = () => {
@@ -217,6 +249,24 @@ export function BasketballStatsView({ roster, statsData, isLoading }: Basketball
                             {copied && copiedType === 'Stats' ? 'Copied!' : 'Stats'}
                         </Button>
                         <ButtonGroupSeparator />
+                        <Button
+                            variant={copied && copiedType === '3 Cat' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={handleCopy3Cat}
+                        >
+                            <Copy className="h-4 w-4" />
+                            {copied && copiedType === '3 Cat' ? 'Copied!' : '3 Cat'}
+                        </Button>
+                        <ButtonGroupSeparator />
+                        <Button
+                            variant={copied && copiedType === '2 Cat' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={handleCopy2Cat}
+                        >
+                            <Copy className="h-4 w-4" />
+                            {copied && copiedType === '2 Cat' ? 'Copied!' : '2 Cat'}
+                        </Button>
+                        <ButtonGroupSeparator />
                         <Button size="sm" variant="outline" onClick={handleDownloadStats}>
                             <Download className="h-4 w-4" />
                             Csv
@@ -226,6 +276,7 @@ export function BasketballStatsView({ roster, statsData, isLoading }: Basketball
                             <Download className="h-4 w-4" />
                             Raw
                         </Button>
+
                     </ButtonGroup>
                 )}
             </div>
