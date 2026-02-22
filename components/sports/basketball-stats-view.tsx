@@ -34,7 +34,7 @@ function formatPct(pct: string | undefined): string {
     if (!pct) return '';
     const num = parseFloat(pct);
     if (isNaN(num)) return pct;
-    return `${Math.floor(num * 100)}%`;
+    return `${Math.round(num * 100)}%`;
 }
 
 /** Calculate per-game stat, return formatted string */

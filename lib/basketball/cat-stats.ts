@@ -18,8 +18,9 @@ interface RankedStat {
  *
  * Normalization puts all stats on a comparable ~0-15 scale:
  *   PPG, RPG, APG, BPG, SPG  → per-game value as-is
- *   FG%, 3PT%                → decimal × 10
- *   FT%                      → decimal × 6.66 (de-weighted since FT% is naturally higher)
+ *   3PT%                     → decimal × 10
+ *   FG%                      → decimal × 9
+ *   FT%                      → decimal × 5 (de-weighted since FT% is naturally higher)
  *   MPG                      → raw ÷ 10, only included if raw > 30
  *
  * Tiebreaker order: 3PT% → FG% → FT% → BPG → SPG → RPG → APG → MPG
@@ -34,13 +35,13 @@ export function getBasketballCatStats(player: BasketballPlayerRaw, count: number
     const gp = parseInt(player.gpGs) || 0;
 
     const threePct = parseFloat(player.threeFgPct);
-    if (threePct > 0) candidates.push({ label: '3-PT FG', displayValue: `${Math.floor(threePct * 100)}%`, score: threePct * 10, priority: 1 });
+    if (threePct > 0) candidates.push({ label: '3-PT FG', displayValue: `${Math.round(threePct * 100)}%`, score: threePct * 10, priority: 1 });
 
     const fgPct = parseFloat(player.fgPct);
-    if (fgPct > 0) candidates.push({ label: 'FG', displayValue: `${Math.floor(fgPct * 100)}%`, score: fgPct * 10, priority: 2 });
+    if (fgPct > 0) candidates.push({ label: 'FG', displayValue: `${Math.round(fgPct * 100)}%`, score: fgPct * 9, priority: 2 });
 
     const ftPct = parseFloat(player.ftPct);
-    if (ftPct > 0) candidates.push({ label: 'FT', displayValue: `${Math.floor(ftPct * 100)}%`, score: ftPct * 6.66, priority: 3 });
+    if (ftPct > 0) candidates.push({ label: 'FT', displayValue: `${Math.round(ftPct * 100)}%`, score: ftPct * 5, priority: 3 });
 
     if (gp > 0 && player.blk > 0) {
         const bpg = player.blk / gp;
