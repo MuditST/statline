@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: statline
+    runtime: node
+    buildCommand: "apt-get update && apt-get install -y poppler-utils && pnpm install && pnpm build"
+    startCommand: "pnpm start"
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PNPM_VERSION
+        value: "9"
+    plan: free
