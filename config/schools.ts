@@ -78,13 +78,15 @@ export const SCHOOLS: SchoolConfig[] = [
         name: 'Georgia Tech',
         domain: 'ramblinwreck.com',
         sidearmDomain: '',  // not used — GT doesn't use Sidearm
-        sports: ['baseball'],
+        sports: ['baseball', 'softball'],
         platform: 'gtech',
         rosterUrls: {
             'baseball': 'https://ramblinwreck.com/sports/m-basebl/roster/',
+            'softball': 'https://ramblinwreck.com/sports/w-softbl/roster/',
         },
         statsUrls: {
-            'baseball': 'https://ramblinwreck.com/wp-content/uploads/2026/02/GT-Baseball-Season-Stats-2026-2.pdf',
+            'baseball': 'https://ramblinwreck.com/wp-content/uploads/2026/02/GT-Baseball-Season-Stats-2026-4.pdf',
+            'softball': 'https://ramblinwreck.com/wp-content/uploads/2026/02/GTSB022026-1.pdf',
         },
     },
     // Sun Belt - tested MSOC + WSOC + WVBALL + Football

@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
             }
 
             // ===== Georgia Tech — GT-specific PDF parser (non-Sidearm) =====
-            if (school.platform === 'gtech' && sport === 'baseball') {
+            if (school.platform === 'gtech' && (sport === 'baseball' || sport === 'softball')) {
                 const { mergeGtechStats } = await import('@/lib/pdf/gtech-parser');
                 const { extractRoster } = await import('@/lib/roster/extractor');
 
