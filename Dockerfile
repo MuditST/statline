@@ -16,5 +16,14 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
+# --- Production stage ---
+# Next.js standalone output goes to .next/standalone
+# Static assets must be copied alongside it
+RUN cp -r .next/static .next/standalone/.next/static
+RUN cp -r public .next/standalone/public 2>/dev/null || true
+
+WORKDIR /app/.next/standalone
 EXPOSE 3000
-CMD ["pnpm", "start"]
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+CMD ["node", "server.js"]
