@@ -13,11 +13,12 @@ export interface PdfResponse {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { url, schoolId, sport, wmtStatsPageUrl } = body as {
+        const { url, schoolId, sport, wmtStatsPageUrl, pastedStats } = body as {
             url?: string;
             schoolId?: string;
             sport?: SportType;
             wmtStatsPageUrl?: string;
+            pastedStats?: string;
         };
 
         // ===== WMT custom school — auto-discover team_id from stats page =====
@@ -149,22 +150,28 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            // ===== Georgia Tech — GT-specific PDF parser (non-Sidearm) =====
+            // ===== Georgia Tech — GT-specific text parser (non-Sidearm) =====
             if (school.platform === 'gtech' && (sport === 'baseball' || sport === 'softball')) {
+                if (!pastedStats?.trim()) {
+                    return NextResponse.json<PdfResponse>(
+                        { success: false, error: 'Georgia Tech stats require pasted text from the PDF. Open the PDF, select all (Ctrl+A), copy (Ctrl+C), and paste into the Stats Text box.' },
+                        { status: 400 }
+                    );
+                }
+
                 const { mergeGtechStats } = await import('@/lib/pdf/gtech-parser');
                 const { extractRoster } = await import('@/lib/roster/extractor');
 
-                const statsUrl = school.statsUrls?.[sport];
                 const rosterUrl = school.rosterUrls?.[sport];
-                if (!statsUrl || !rosterUrl) {
+                if (!rosterUrl) {
                     return NextResponse.json<PdfResponse>(
-                        { success: false, error: `Missing GT URLs for ${sport}` },
+                        { success: false, error: `Missing GT roster URL for ${sport}` },
                         { status: 404 }
                     );
                 }
 
                 const roster = await extractRoster(rosterUrl);
-                const merged = await mergeGtechStats(roster, statsUrl);
+                const merged = mergeGtechStats(roster, pastedStats);
 
                 return NextResponse.json({
                     success: true,

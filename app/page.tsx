@@ -15,6 +15,7 @@ import { Toaster, toast } from 'sonner';
 import { SchoolCombobox } from '@/components/school-combobox';
 import { SportSelector } from '@/components/sport-selector';
 import { CustomUrlForm } from '@/components/custom-url-form';
+import { GtechPasteDialog } from '@/components/gtech-paste-dialog';
 import { ModeToggle } from '@/components/mode-toggle';
 import { HelpCircle, Loader2 } from 'lucide-react';
 import { getSchoolById } from '@/config/schools';
@@ -34,6 +35,7 @@ export default function Home() {
     const [customStatsUrl, setCustomStatsUrl] = useState('');
     const [customPlatform, setCustomPlatform] = useState<'sidearm' | 'wmt'>('sidearm');
     const [comboboxKey, setComboboxKey] = useState(0);
+    const [gtechPastedStats, setGtechPastedStats] = useState('');
 
     // Data state
     const [isLoading, setIsLoading] = useState(false);
@@ -42,6 +44,10 @@ export default function Home() {
     const [statsData, setStatsData] = useState<any>(null);
 
     // Clear ALL data when sport changes
+    // Detect if selected school is a GT-platform school
+    const selectedSchoolConfig = selectedSchool ? getSchoolById(selectedSchool) : null;
+    const isGtechSchool = selectedSchoolConfig?.platform === 'gtech';
+
     useEffect(() => {
         setRosterData([]);
         setStatsData(null);
@@ -51,6 +57,7 @@ export default function Home() {
         setCustomRosterUrl('');
         setCustomStatsUrl('');
         setCustomPlatform('sidearm');
+        setGtechPastedStats('');
     }, [selectedSport]);
 
     const canFetch = useCustomUrls
@@ -138,7 +145,11 @@ export default function Home() {
                 ? effectivePlatform === 'wmt'
                     ? { wmtStatsPageUrl: statsUrlToFetch, sport: selectedSport }
                     : { url: statsUrlToFetch, sport: selectedSport }
-                : { schoolId: selectedSchool, sport: selectedSport };
+                : {
+                    schoolId: selectedSchool,
+                    sport: selectedSport,
+                    ...(isGtechSchool && gtechPastedStats.trim() ? { pastedStats: gtechPastedStats } : {}),
+                };
 
             const pdfRes = await fetch('/api/pdf', {
                 method: 'POST',
@@ -271,6 +282,15 @@ export default function Home() {
                                         onRosterUrlChange={setCustomRosterUrl}
                                         onStatsUrlChange={setCustomStatsUrl}
                                         onPlatformChange={setCustomPlatform}
+                                    />
+                                )}
+
+                                {/* GT Paste Stats */}
+                                {isGtechSchool && (
+                                    <GtechPasteDialog
+                                        sport={selectedSport}
+                                        pastedStats={gtechPastedStats}
+                                        onStatsChange={setGtechPastedStats}
                                     />
                                 )}
 

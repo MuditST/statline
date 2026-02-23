@@ -1,20 +1,16 @@
 /**
- * Georgia Tech PDF stats parser (node-poppler edition)
+ * Georgia Tech stats text parser
  *
- * GT uses a unique stats PDF format (not Sidearm). This parser uses
- * node-poppler's pdfToText with maintainLayout to extract structured text,
- * then splits each line by whitespace to extract stats.
+ * GT uses a unique stats PDF format (not Sidearm). Because the PDF's internal
+ * text stream merges adjacent column values, standard JS PDF libraries
+ * (pdf-parse / pdfjs-dist) cannot reliably extract structured data.
  *
- * The `maintainLayout` option produces output nearly identical to copy-paste,
- * where each column value is separated by whitespace — no X-coordinate
- * guessing or digit-splitting heuristics needed.
+ * Instead, users copy-paste text from the PDF (Ctrl+A → Ctrl+C). The pasted
+ * text is whitespace-separated — each column value naturally separated by
+ * spaces — making it trivial to parse with simple string splitting.
  *
- * This handles both GT baseball and GT softball PDFs (identical format).
+ * This handles both GT baseball and GT softball (identical format).
  */
-import { Poppler } from 'node-poppler';
-import { writeFileSync, unlinkSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import type { RosterPlayer } from '@/lib/roster/extractor';
 import type { PlayerStats } from '@/lib/parsers/baseball';
 
@@ -37,34 +33,6 @@ interface GtechPitchingRaw {
     so: number; hr: number; hbp: number;
 }
 
-// ===== PDF text extraction =====
-
-/**
- * Fetch a PDF from a URL and extract text using node-poppler's pdfToText
- * with maintainLayout (equivalent to `pdftotext -layout`).
- */
-async function extractGtechText(pdfUrl: string): Promise<string> {
-    const response = await fetch(pdfUrl);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch GT stats PDF: ${response.status} ${response.statusText}`);
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-
-    // pdfToText requires a file path — write to temp, extract, clean up
-    const tmpFile = join(tmpdir(), `gtech-stats-${Date.now()}.pdf`);
-    writeFileSync(tmpFile, buffer);
-
-    try {
-        const poppler = new Poppler();
-        const text = await poppler.pdfToText(tmpFile, undefined, {
-            maintainLayout: true,
-        });
-        return text as string;
-    } finally {
-        try { unlinkSync(tmpFile); } catch { /* ignore cleanup errors */ }
-    }
-}
 
 // ===== Line parsing =====
 
@@ -289,18 +257,18 @@ function findRosterMatch(pdfName: string, roster: RosterPlayer[]): RosterPlayer 
         || lastNameMatches[0];
 }
 
-// ===== Public API =====
-
 /**
- * Fetch GT stats PDF, parse batting + pitching, and merge with roster.
- * Works for both GT baseball and GT softball (same PDF format).
+ * Parse pasted GT stats text (batting + pitching) and merge with roster.
+ * Works for both GT baseball and GT softball (same format).
+ *
+ * The `pastedStatsText` parameter should be the raw text the user gets
+ * by opening the GT PDF in a browser and pressing Ctrl+A → Ctrl+C.
  */
-export async function mergeGtechStats(
+export function mergeGtechStats(
     roster: RosterPlayer[],
-    statsUrl: string
-): Promise<PlayerStats[]> {
-    const text = await extractGtechText(statsUrl);
-    const { batting, pitching } = parseGtechText(text);
+    pastedStatsText: string
+): PlayerStats[] {
+    const { batting, pitching } = parseGtechText(pastedStatsText);
 
     return roster.map(player => {
         const fullName = `${player.firstName} ${player.lastName}`;

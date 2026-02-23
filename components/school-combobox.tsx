@@ -86,6 +86,9 @@ export function SchoolCombobox({
                     statsUrl = `https://api.wmt.games/api/statistics/teams/${config.wmtTeamId[sport]}/players`;
                 } else if (config.statsUrls?.[sport]) {
                     statsUrl = config.statsUrls[sport]!;
+                } else if (config.statsPageUrls?.[sport]) {
+                    // GT: use the team page URL (PDF link is scraped at runtime)
+                    statsUrl = config.statsPageUrls[sport]!;
                 } else {
                     statsUrl = generateStatsUrls(config.sidearmDomain, sport, config.s3Region)[0] || '';
                 }

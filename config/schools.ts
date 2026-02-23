@@ -21,6 +21,8 @@ export interface SchoolConfig {
     rosterUrls?: Partial<Record<SportType, string>>;
     /** Direct stats PDF URL overrides per sport (bypasses Sidearm auto-generation) */
     statsUrls?: Partial<Record<SportType, string>>;
+    /** Team page URLs for scraping the current stats PDF link (GT) */
+    statsPageUrls?: Partial<Record<SportType, string>>;
     /** WMT API team ID per sport (for api.wmt.games stats fetching) */
     wmtTeamId?: Partial<Record<SportType, string>>;
 }
@@ -84,9 +86,9 @@ export const SCHOOLS: SchoolConfig[] = [
             'baseball': 'https://ramblinwreck.com/sports/m-basebl/roster/',
             'softball': 'https://ramblinwreck.com/sports/w-softbl/roster/',
         },
-        statsUrls: {
-            'baseball': 'https://ramblinwreck.com/wp-content/uploads/2026/02/GT-Baseball-Season-Stats-2026-4.pdf',
-            'softball': 'https://ramblinwreck.com/wp-content/uploads/2026/02/GTSB022026-1.pdf',
+        statsPageUrls: {
+            'baseball': 'https://ramblinwreck.com/sports/m-basebl/',
+            'softball': 'https://ramblinwreck.com/sports/w-softbl/',
         },
     },
     // Sun Belt - tested MSOC + WSOC + WVBALL + Football
