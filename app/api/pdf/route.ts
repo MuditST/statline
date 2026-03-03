@@ -47,6 +47,23 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // ===== Custom hybrid — pasted stats without school config =====
+        if (pastedStats?.trim() && !schoolId && sport) {
+            if (sport === 'baseball' || sport === 'softball') {
+                const { parseHybridStats } = await import('@/lib/parsers/hybrid-parser');
+                const { batting, pitching } = parseHybridStats(pastedStats);
+                return NextResponse.json({
+                    success: true,
+                    type: 'baseball',
+                    data: { batting, pitching },
+                });
+            }
+            return NextResponse.json<PdfResponse>(
+                { success: false, error: `Hybrid paste not supported for ${sport} yet` },
+                { status: 400 }
+            );
+        }
+
         // ===== Custom URL (no school config) =====
         if (url && !schoolId) {
             // If sport is provided, route to sport-specific parser
@@ -177,6 +194,26 @@ export async function POST(request: NextRequest) {
                     success: true,
                     type: 'gtech',
                     data: merged,
+                });
+            }
+
+            // ===== Hybrid platform — universal pasted-stats parser =====
+            if (school.platform === 'hybrid' && (sport === 'baseball' || sport === 'softball')) {
+                if (!pastedStats?.trim()) {
+                    return NextResponse.json<PdfResponse>(
+                        { success: false, error: 'Hybrid stats require pasted text. Open the stats PDF or stats page, select all (Ctrl+A), copy (Ctrl+C), and paste via the Paste button.' },
+                        { status: 400 }
+                    );
+                }
+
+                const { parseHybridStats } = await import('@/lib/parsers/hybrid-parser');
+
+                const { batting, pitching } = parseHybridStats(pastedStats);
+
+                return NextResponse.json({
+                    success: true,
+                    type: 'baseball',
+                    data: { batting, pitching },
                 });
             }
 

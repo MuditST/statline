@@ -15,7 +15,7 @@ import { Toaster, toast } from 'sonner';
 import { SchoolCombobox } from '@/components/school-combobox';
 import { SportSelector } from '@/components/sport-selector';
 import { CustomUrlForm } from '@/components/custom-url-form';
-import { GtechPasteDialog } from '@/components/gtech-paste-dialog';
+import { StatsPasteDialog } from '@/components/gtech-paste-dialog';
 import { ModeToggle } from '@/components/mode-toggle';
 import { HelpCircle, Loader2 } from 'lucide-react';
 import { getSchoolById } from '@/config/schools';
@@ -33,7 +33,8 @@ export default function Home() {
     const [customSchoolName, setCustomSchoolName] = useState('');
     const [customRosterUrl, setCustomRosterUrl] = useState('');
     const [customStatsUrl, setCustomStatsUrl] = useState('');
-    const [customPlatform, setCustomPlatform] = useState<'sidearm' | 'wmt'>('sidearm');
+    const [customPlatform, setCustomPlatform] = useState<'sidearm' | 'wmt' | 'hybrid'>('sidearm');
+    const [customPastedStats, setCustomPastedStats] = useState('');
     const [comboboxKey, setComboboxKey] = useState(0);
     const [gtechPastedStats, setGtechPastedStats] = useState('');
 
@@ -43,10 +44,16 @@ export default function Home() {
     const [rosterData, setRosterData] = useState<RosterPlayer[]>([]);
     const [statsData, setStatsData] = useState<any>(null);
 
-    // Clear ALL data when sport changes
-    // Detect if selected school is a GT-platform school
+    // Detect effective platform — localStorage override (per-sport) takes priority,
+    // config platform only applies if config lists this sport
     const selectedSchoolConfig = selectedSchool ? getSchoolById(selectedSchool) : null;
-    const isGtechSchool = selectedSchoolConfig?.platform === 'gtech';
+    const selectedSchoolOverride = selectedSchool ? getSavedSchool(selectedSchool, selectedSport) : null;
+    const configPlatform = selectedSchoolConfig?.sports.includes(selectedSport)
+        ? selectedSchoolConfig.platform
+        : undefined;
+    const effectiveSchoolPlatform = selectedSchoolOverride?.platform ?? configPlatform;
+    const isGtechSchool = effectiveSchoolPlatform === 'gtech';
+    const isHybridSchool = effectiveSchoolPlatform === 'hybrid';
 
     useEffect(() => {
         setRosterData([]);
@@ -58,11 +65,30 @@ export default function Home() {
         setCustomStatsUrl('');
         setCustomPlatform('sidearm');
         setGtechPastedStats('');
+        setCustomPastedStats('');
     }, [selectedSport]);
 
+    // Reset custom form when toggling on (clears stale data from previous entries)
+    const handleCustomUrlToggle = useCallback((checked: boolean) => {
+        setUseCustomUrls(checked);
+        if (checked) {
+            setCustomSchoolName('');
+            setCustomRosterUrl('');
+            setCustomStatsUrl('');
+            setCustomPlatform('sidearm');
+            setCustomPastedStats('');
+        }
+    }, []);
+
     const canFetch = useCustomUrls
-        ? customRosterUrl && customStatsUrl
-        : selectedSchool;
+        ? customPlatform === 'hybrid'
+            ? customRosterUrl && customPastedStats.trim()
+            : customRosterUrl && customStatsUrl
+        : isGtechSchool
+            ? selectedSchool && gtechPastedStats.trim()
+            : isHybridSchool
+                ? selectedSchool && gtechPastedStats.trim()
+                : selectedSchool;
 
     const hasData = rosterData.length > 0;
 
@@ -71,12 +97,12 @@ export default function Home() {
     const StatsViewComponent = sportConfig.StatsViewComponent;
 
     // Handle editing a school from the info popover
-    const handleEditSchool = useCallback((school: { name: string; rosterUrl: string; statsUrl: string; platform?: 'gtech' | 'wmt' }) => {
+    const handleEditSchool = useCallback((school: { name: string; rosterUrl: string; statsUrl: string; platform?: 'gtech' | 'wmt' | 'hybrid' }) => {
         setUseCustomUrls(true);
         setCustomSchoolName(school.name);
         setCustomRosterUrl(school.rosterUrl);
         setCustomStatsUrl(school.statsUrl);
-        setCustomPlatform(school.platform === 'wmt' ? 'wmt' : 'sidearm');
+        setCustomPlatform(school.platform === 'wmt' ? 'wmt' : school.platform === 'hybrid' ? 'hybrid' : 'sidearm');
     }, []);
 
     // Handle school deletion callback
@@ -96,7 +122,7 @@ export default function Home() {
             let rosterUrlToFetch = customRosterUrl;
             let statsUrlToFetch = customStatsUrl;
             let isUsingCustom = useCustomUrls;
-            let effectivePlatform: 'sidearm' | 'wmt' = useCustomUrls ? customPlatform : 'sidearm';
+            let effectivePlatform: 'sidearm' | 'wmt' | 'hybrid' = useCustomUrls ? customPlatform : 'sidearm';
 
             // If not using custom form, check for localStorage override
             if (!useCustomUrls && selectedSchool) {
@@ -105,9 +131,8 @@ export default function Home() {
                     rosterUrlToFetch = savedOverride.rosterUrl;
                     statsUrlToFetch = savedOverride.statsUrl;
                     isUsingCustom = true;
-                    // Use saved platform if it's a WMT override
-                    if (savedOverride.platform === 'wmt') {
-                        effectivePlatform = 'wmt';
+                    if (savedOverride.platform) {
+                        effectivePlatform = savedOverride.platform;
                     }
                 } else {
                     const school = getSchoolById(selectedSchool);
@@ -144,11 +169,13 @@ export default function Home() {
             const pdfBody = isUsingCustom
                 ? effectivePlatform === 'wmt'
                     ? { wmtStatsPageUrl: statsUrlToFetch, sport: selectedSport }
-                    : { url: statsUrlToFetch, sport: selectedSport }
+                    : effectivePlatform === 'hybrid'
+                        ? { pastedStats: customPastedStats, sport: selectedSport }
+                        : { url: statsUrlToFetch, sport: selectedSport }
                 : {
                     schoolId: selectedSchool,
                     sport: selectedSport,
-                    ...(isGtechSchool && gtechPastedStats.trim() ? { pastedStats: gtechPastedStats } : {}),
+                    ...((isGtechSchool || isHybridSchool) && gtechPastedStats.trim() ? { pastedStats: gtechPastedStats } : {}),
                 };
 
             const pdfRes = await fetch('/api/pdf', {
@@ -189,10 +216,10 @@ export default function Home() {
                     name: customSchoolName.trim(),
                     sport: selectedSport,
                     rosterUrl: customRosterUrl,
-                    statsUrl: customStatsUrl,
-                    ...(customPlatform === 'wmt' ? { platform: 'wmt' as const } : {}),
+                    statsUrl: customPlatform === 'hybrid' ? '' : customStatsUrl,
+                    ...(customPlatform !== 'sidearm' ? { platform: customPlatform as 'wmt' | 'hybrid' } : {}),
                 });
-                toast.success('School added to list');
+                toast.success(`${customSchoolName.trim()} saved`);
                 setComboboxKey(k => k + 1);
             }
 
@@ -238,7 +265,7 @@ export default function Home() {
                                     <Switch
                                         id="custom-urls"
                                         checked={useCustomUrls}
-                                        onCheckedChange={setUseCustomUrls}
+                                        onCheckedChange={handleCustomUrlToggle}
                                     />
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -278,16 +305,29 @@ export default function Home() {
                                         rosterUrl={customRosterUrl}
                                         statsUrl={customStatsUrl}
                                         platform={customPlatform}
+                                        sport={selectedSport}
+                                        pastedStats={customPastedStats}
                                         onSchoolNameChange={setCustomSchoolName}
                                         onRosterUrlChange={setCustomRosterUrl}
                                         onStatsUrlChange={setCustomStatsUrl}
                                         onPlatformChange={setCustomPlatform}
+                                        onPastedStatsChange={setCustomPastedStats}
                                     />
                                 )}
 
-                                {/* GT Paste Stats */}
-                                {isGtechSchool && (
-                                    <GtechPasteDialog
+                                {/* GT Paste Stats — shows PDF link (only when NOT in custom URL mode) */}
+                                {!useCustomUrls && isGtechSchool && (
+                                    <StatsPasteDialog
+                                        sport={selectedSport}
+                                        pastedStats={gtechPastedStats}
+                                        onStatsChange={setGtechPastedStats}
+                                        showGtechPdfLink
+                                    />
+                                )}
+
+                                {/* Hybrid Paste Stats — no PDF link (only when NOT in custom URL mode) */}
+                                {!useCustomUrls && isHybridSchool && (
+                                    <StatsPasteDialog
                                         sport={selectedSport}
                                         pastedStats={gtechPastedStats}
                                         onStatsChange={setGtechPastedStats}

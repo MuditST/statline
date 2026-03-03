@@ -27,7 +27,7 @@ interface SchoolInfoPopoverProps {
     rosterUrl: string;
     statsUrl: string;
     isCustomized: boolean;
-    platform?: 'gtech' | 'wmt';
+    platform?: 'gtech' | 'wmt' | 'hybrid';
     onEdit: () => void;
     onDelete?: () => void;
     disabled?: boolean;
@@ -90,6 +90,11 @@ export function SchoolInfoPopover({
                                     GT Hybrid
                                 </Badge>
                             )}
+                            {platform === 'hybrid' && (
+                                <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                    Hybrid
+                                </Badge>
+                            )}
                             {isCustomized ? (
                                 <Badge variant="secondary" className="text-xs">
                                     Custom
@@ -121,20 +126,27 @@ export function SchoolInfoPopover({
                             </a>
                         </div>
 
-                        <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground">
-                                Stats {platform === 'wmt' ? 'API' : 'URL'}
-                            </p>
-                            <a
-                                href={statsUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
-                            >
-                                {truncateUrl(statsUrl)}
-                                <ExternalLink className="h-3 w-3 shrink-0" />
-                            </a>
-                        </div>
+                        {(platform === 'hybrid' || platform === 'gtech') ? (
+                            <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground">Stats</p>
+                                <p className="text-sm text-muted-foreground">Pasted manually</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    Stats {platform === 'wmt' ? 'API' : 'URL'}
+                                </p>
+                                <a
+                                    href={statsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
+                                >
+                                    {truncateUrl(statsUrl)}
+                                    <ExternalLink className="h-3 w-3 shrink-0" />
+                                </a>
+                            </div>
+                        )}
                     </div>
 
                     {/* Note for Sidearm config schools about fallback */}

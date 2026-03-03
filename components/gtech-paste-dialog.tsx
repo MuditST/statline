@@ -14,89 +14,44 @@ import { Badge } from '@/components/ui/badge';
 import { ClipboardPaste, ExternalLink, Check, Loader2, Eye, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { SportType } from '@/types';
+import { validateHybridPastedStats } from '@/lib/parsers/hybrid-parser';
 
-interface GtechPasteDialogProps {
+interface StatsPasteDialogProps {
     sport: SportType;
     pastedStats: string;
     onStatsChange: (text: string) => void;
-}
-
-/** Quick client-side check that the pasted text looks like GT stats. */
-function validatePastedStats(text: string): {
-    valid: boolean;
-    hasBatting: boolean;
-    hasPitching: boolean;
-    message: string;
-} {
-    const lines = text.split('\n');
-
-    // Look for batting header (PLAYER AVG GP-GS AB ...)
-    const hasBatting = lines.some(
-        (l) => l.includes('PLAYER') && l.includes('AVG') && l.includes('AB')
-    );
-
-    // Look for pitching header (PLAYER ERA W-L APP ...)
-    const hasPitching = lines.some(
-        (l) => l.includes('PLAYER') && l.includes('ERA') && l.includes('IP')
-    );
-
-    if (hasBatting && hasPitching) {
-        return {
-            valid: true,
-            hasBatting: true,
-            hasPitching: true,
-            message: 'Stats found',
-        };
-    }
-
-    if (hasBatting) {
-        return {
-            valid: true,
-            hasBatting: true,
-            hasPitching: false,
-            message: 'Batting found (pitching missing — make sure you copied the entire PDF)',
-        };
-    }
-
-    if (hasPitching) {
-        return {
-            valid: true,
-            hasBatting: false,
-            hasPitching: true,
-            message: 'Pitching found (batting missing — make sure you copied the entire PDF)',
-        };
-    }
-
-    return {
-        valid: false,
-        hasBatting: false,
-        hasPitching: false,
-        message:
-            'This doesn\'t look like GT stats. Open the stats PDF, click on the PDF, press Ctrl+A to select all, then Ctrl+C to copy.',
-    };
+    /** If true, show GT-specific PDF URL link. Default false. */
+    showGtechPdfLink?: boolean;
 }
 
 /**
- * Inline section for GT stats pasting.
+ * Inline section for pasting stats text.
  *
- * Shows instructions + "Open Stats PDF" link + "Paste from Clipboard" button.
+ * Shows instructions + "Paste from Clipboard" button.
  * Validates the pasted text and shows a success/error message.
  * Optional Eye icon to preview pasted text in a read-only dialog.
+ *
+ * Used by:
+ * - GT configured school (showGtechPdfLink=true → shows "Open Stats PDF" link)
+ * - Hybrid configured school (showGtechPdfLink=false → generic paste instructions)
+ * - Custom URL form with hybrid tab (showGtechPdfLink=false)
  */
-export function GtechPasteDialog({
+export function StatsPasteDialog({
     sport,
     pastedStats,
     onStatsChange,
-}: GtechPasteDialogProps) {
+    showGtechPdfLink = false,
+}: StatsPasteDialogProps) {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [pdfUrlLoading, setPdfUrlLoading] = useState(false);
     const [isPasting, setIsPasting] = useState(false);
 
     const hasStats = pastedStats.trim().length > 0;
-    const validation = hasStats ? validatePastedStats(pastedStats) : null;
+    const validation = hasStats ? validateHybridPastedStats(pastedStats) : null;
 
-    // Fetch the current PDF URL when the component mounts or sport changes
+    // Fetch the current PDF URL when GT mode — only when showGtechPdfLink is true
     const fetchPdfUrl = useCallback(async () => {
+        if (!showGtechPdfLink) return;
         setPdfUrlLoading(true);
         try {
             const res = await fetch('/api/gtech-pdf-url', {
@@ -115,7 +70,7 @@ export function GtechPasteDialog({
         } finally {
             setPdfUrlLoading(false);
         }
-    }, [sport]);
+    }, [sport, showGtechPdfLink]);
 
     useEffect(() => {
         fetchPdfUrl();
@@ -126,27 +81,25 @@ export function GtechPasteDialog({
         try {
             const text = await navigator.clipboard.readText();
             if (!text.trim()) {
-                toast.error('Clipboard is empty. Copy the PDF text first.');
+                toast.error('Clipboard is empty — copy the stats page first.');
                 return;
             }
 
-            const result = validatePastedStats(text);
+            const result = validateHybridPastedStats(text);
             if (!result.valid) {
-                toast.error(result.message, { duration: 6000 });
+                toast.error('No stats headers detected — make sure you copied the full stats page.', { duration: 6000 });
                 return;
             }
 
             onStatsChange(text);
 
             if (result.hasBatting && result.hasPitching) {
-                toast.success('Stats pasted — batting + pitching found');
+                toast.success('Stats pasted successfully');
             } else {
-                toast.warning(result.message, { duration: 5000 });
+                toast.warning('Incomplete stats — only ' + (result.hasBatting ? 'batting' : 'pitching') + ' detected', { duration: 5000 });
             }
         } catch {
-            toast.error(
-                'Could not read clipboard. Make sure you\'ve copied the PDF text and allowed clipboard access.'
-            );
+            toast.error('Could not read clipboard — allow clipboard access and try again.');
         } finally {
             setIsPasting(false);
         }
@@ -156,34 +109,52 @@ export function GtechPasteDialog({
         <div className="space-y-3 rounded-md border border-border p-4 bg-muted/30">
             {/* Instructions */}
             <p className="text-sm text-muted-foreground">
-                GT stats require a manual paste.{' '}
-                {pdfUrlLoading ? (
-                    <span className="inline-flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Finding PDF…
-                    </span>
-                ) : pdfUrl ? (
+                {showGtechPdfLink ? (
+                    // GT-specific instructions with PDF link
                     <>
-                        <a
-                            href={pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
-                        >
-                            Open the Stats PDF
-                            <ExternalLink className="h-3 w-3" />
-                        </a>
-                        , click on the PDF, press{' '}
-                        <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
-                            Ctrl+A
-                        </kbd>{' '}
-                        to select everything, then{' '}
-                        <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
-                            Ctrl+C
-                        </kbd>{' '} or right click & select copy to copy the entire PDF. Then press the Paste button below.
+                        GT stats require a manual paste.{' '}
+                        {pdfUrlLoading ? (
+                            <span className="inline-flex items-center gap-1">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Finding PDF…
+                            </span>
+                        ) : pdfUrl ? (
+                            <>
+                                <a
+                                    href={pdfUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                                >
+                                    Open the Stats PDF
+                                    <ExternalLink className="h-3 w-3" />
+                                </a>
+                                , click on the PDF, press{' '}
+                                <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                                    Ctrl+A
+                                </kbd>{' '}
+                                to select everything, then{' '}
+                                <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                                    Ctrl+C
+                                </kbd>{' '} or right click &amp; select copy to copy the entire PDF. Then press the Paste button below.
+                            </>
+                        ) : (
+                            'Open the GT stats PDF, click on it, press Ctrl+A to select everything, then Ctrl+C to copy the entire PDF.'
+                        )}
                     </>
                 ) : (
-                    'Open the GT stats PDF, click on it, press Ctrl+A to select everything, then Ctrl+C to copy the entire PDF.'
+                    // Generic hybrid instructions
+                    <>
+                        Open the team&apos;s stats PDF or stats page, select all text (
+                        <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                            Ctrl+A
+                        </kbd>
+                        ), copy (
+                        <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                            Ctrl+C
+                        </kbd>
+                        ), then press the Paste button below.
+                    </>
                 )}
             </p>
 
@@ -254,3 +225,6 @@ export function GtechPasteDialog({
         </div>
     );
 }
+
+// Re-export old name for backwards compatibility (GT uses still import this)
+export { StatsPasteDialog as GtechPasteDialog };

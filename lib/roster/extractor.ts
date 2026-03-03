@@ -45,14 +45,21 @@ function abbreviatePosition(pos: string): string {
         'right side hitter': 'RS',
         // Baseball
         'pitcher': 'P',
+        'right handed pitcher': 'RHP',
+        'left handed pitcher': 'LHP',
+        'right-handed pitcher': 'RHP',
+        'left-handed pitcher': 'LHP',
         'catcher': 'C',
         'infielder': 'IF',
         'outfielder': 'OF',
         'designated hitter': 'DH',
         'utility': 'UTL',
         'first base': '1B',
+        'first baseman': '1B',
         'second base': '2B',
+        'second baseman': '2B',
         'third base': '3B',
+        'third baseman': '3B',
         'shortstop': 'SS',
     };
 

@@ -14,8 +14,8 @@ export interface SavedSchool {
     rosterUrl: string;
     /** Custom stats PDF URL (Sidearm) or stats page URL (WMT) */
     statsUrl: string;
-    /** Platform type - 'wmt' for WMT schools, undefined for Sidearm (default) */
-    platform?: 'wmt';
+    /** Platform type - undefined for Sidearm (default) */
+    platform?: 'wmt' | 'hybrid';
     /** Timestamp when saved */
     savedAt: number;
 }

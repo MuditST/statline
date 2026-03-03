@@ -16,7 +16,7 @@ export interface SchoolConfig {
     /** S3 region - most use us-east-2, but some use us-east-1 */
     s3Region?: 'us-east-1' | 'us-east-2';
     /** Non-Sidearm platform identifier — triggers special handling */
-    platform?: 'gtech' | 'wmt';
+    platform?: 'gtech' | 'wmt' | 'hybrid';
     /** Direct roster URL overrides per sport (bypasses Sidearm auto-generation) */
     rosterUrls?: Partial<Record<SportType, string>>;
     /** Direct stats PDF URL overrides per sport (bypasses Sidearm auto-generation) */
@@ -141,9 +141,22 @@ export const SCHOOLS: SchoolConfig[] = [
     },
     // S
     { id: 'sam-houston', name: 'Sam Houston', domain: 'gobearkats.com', sidearmDomain: 'gobearkats.com', sports: WITH_WSOC_VB_FB },
+    // South Carolina - hybrid (roster from web, stats pasted from PDF)
+    {
+        id: 'south-carolina',
+        name: 'South Carolina',
+        domain: 'gamecocksonline.com',
+        sidearmDomain: '',
+        sports: ['baseball'],
+        platform: 'hybrid',
+        rosterUrls: {
+            'baseball': 'https://gamecocksonline.com/sports/baseball/roster/',
+        },
+    },
     // Sun Belt - WSOC only (no MSOC team) + Football
     { id: 'south-alabama', name: 'South Alabama', domain: 'usajaguars.com', sidearmDomain: 'usajaguars.com', sports: WITH_WSOC_VB_FB },
     { id: 'southern-miss', name: 'Southern Miss', domain: 'southernmiss.com', sidearmDomain: 'southernmiss.com', sports: WITH_WSOC_VB_FB },
+
     // T
     { id: 'texas-state', name: 'Texas State', domain: 'txst.com', sidearmDomain: 'txstate.sidearmsports.com', sports: WITH_WSOC_VB_FB },
     { id: 'troy', name: 'Troy', domain: 'troytrojans.com', sidearmDomain: 'troytrojans.com', sports: WITH_WSOC_VB_FB },
@@ -164,6 +177,19 @@ export const SCHOOLS: SchoolConfig[] = [
         },
     },
     { id: 'ulm', name: 'ULM', domain: 'ulmwarhawks.com', sidearmDomain: 'ulm.sidearmsports.com', sports: ALL_SPORTS },
+    // V
+    // Vanderbilt - hybrid (roster from web, stats pasted from PDF)
+    {
+        id: 'vanderbilt',
+        name: 'Vanderbilt',
+        domain: 'vucommodores.com',
+        sidearmDomain: '',
+        sports: ['baseball'],
+        platform: 'hybrid',
+        rosterUrls: {
+            'baseball': 'https://vucommodores.com/sports/baseball/roster/',
+        },
+    },
     // W
     { id: 'west-georgia', name: 'West Georgia', domain: 'uwgathletics.com', sidearmDomain: 'uwgsports.com', sports: BASE_SPORTS },
     { id: 'western-carolina', name: 'Western Carolina', domain: 'catamountsports.com', sidearmDomain: 'catamountsports.com', sports: BASE_SPORTS },

@@ -30,14 +30,14 @@ interface MergedSchool {
     isCustomOnly: boolean; // Not in config, only in localStorage
     rosterUrl: string;
     statsUrl: string;
-    platform?: 'gtech' | 'wmt';
+    platform?: 'gtech' | 'wmt' | 'hybrid';
 }
 
 interface SchoolComboboxProps {
     value: string;
     onValueChange: (value: string) => void;
     sport: SportType;
-    onEditSchool?: (school: { name: string; rosterUrl: string; statsUrl: string; platform?: 'gtech' | 'wmt' }) => void;
+    onEditSchool?: (school: { name: string; rosterUrl: string; statsUrl: string; platform?: 'gtech' | 'wmt' | 'hybrid' }) => void;
     onSchoolDeleted?: () => void;
 }
 
@@ -82,12 +82,14 @@ export function SchoolCombobox({
                     || generateRosterUrls(config.domain, sport)[0] || '';
 
                 let statsUrl: string;
-                if (config.platform === 'wmt' && config.wmtTeamId?.[sport]) {
+                if (config.platform === 'hybrid' || config.platform === 'gtech') {
+                    // Paste-based platforms have no stats URL
+                    statsUrl = '';
+                } else if (config.platform === 'wmt' && config.wmtTeamId?.[sport]) {
                     statsUrl = `https://api.wmt.games/api/statistics/teams/${config.wmtTeamId[sport]}/players`;
                 } else if (config.statsUrls?.[sport]) {
                     statsUrl = config.statsUrls[sport]!;
                 } else if (config.statsPageUrls?.[sport]) {
-                    // GT: use the team page URL (PDF link is scraped at runtime)
                     statsUrl = config.statsPageUrls[sport]!;
                 } else {
                     statsUrl = generateStatsUrls(config.sidearmDomain, sport, config.s3Region)[0] || '';
