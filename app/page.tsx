@@ -12,18 +12,18 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Toaster, toast } from 'sonner';
-import { SchoolCombobox } from '@/components/school-combobox';
+import { ConfiguredSchoolCombobox } from '@/components/configured-school-combobox';
 import { SportSelector } from '@/components/sport-selector';
 import { CustomUrlForm } from '@/components/custom-url-form';
 import { StatsPasteDialog } from '@/components/gtech-paste-dialog';
 import { ModeToggle } from '@/components/mode-toggle';
 import { HelpCircle, Loader2 } from 'lucide-react';
-import { getSchoolById } from '@/config/schools';
 import { getSportConfig } from '@/lib/sports';
 import { saveSchool, getSavedSchool } from '@/lib/storage/schools';
 import type { SportType } from '@/types';
 import type { RosterPlayer } from '@/lib/roster/extractor';
 import type { RosterResponse } from '@/app/api/roster/route';
+import type { ConfiguredSchoolOption } from '@/lib/schools/types';
 
 export default function Home() {
     // Selection state
@@ -35,6 +35,7 @@ export default function Home() {
     const [customStatsUrl, setCustomStatsUrl] = useState('');
     const [customPlatform, setCustomPlatform] = useState<'sidearm' | 'wmt' | 'hybrid'>('sidearm');
     const [customPastedStats, setCustomPastedStats] = useState('');
+    const [editingSchoolId, setEditingSchoolId] = useState('');
     const [comboboxKey, setComboboxKey] = useState(0);
     const [gtechPastedStats, setGtechPastedStats] = useState('');
 
@@ -42,18 +43,57 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rosterData, setRosterData] = useState<RosterPlayer[]>([]);
-    const [statsData, setStatsData] = useState<any>(null);
+    const [statsData, setStatsData] = useState<unknown>(null);
+    const [configuredSchools, setConfiguredSchools] = useState<ConfiguredSchoolOption[]>([]);
+    const [isConfigLoading, setIsConfigLoading] = useState(false);
 
     // Detect effective platform — localStorage override (per-sport) takes priority,
     // config platform only applies if config lists this sport
-    const selectedSchoolConfig = selectedSchool ? getSchoolById(selectedSchool) : null;
+    const selectedSchoolConfig = selectedSchool
+        ? configuredSchools.find((school) => school.id === selectedSchool)
+        : null;
     const selectedSchoolOverride = selectedSchool ? getSavedSchool(selectedSchool, selectedSport) : null;
-    const configPlatform = selectedSchoolConfig?.sports.includes(selectedSport)
-        ? selectedSchoolConfig.platform
-        : undefined;
+    const configPlatform = selectedSchoolConfig?.platform;
     const effectiveSchoolPlatform = selectedSchoolOverride?.platform ?? configPlatform;
     const isGtechSchool = effectiveSchoolPlatform === 'gtech';
     const isHybridSchool = effectiveSchoolPlatform === 'hybrid';
+    const selectedSchoolHelperUrl = selectedSchoolConfig?.helperUrl ?? '';
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadConfiguredSchools = async () => {
+            setIsConfigLoading(true);
+
+            try {
+                const response = await fetch(`/api/config/schools?sport=${selectedSport}`);
+                const json = await response.json();
+
+                if (!response.ok || !json.success) {
+                    throw new Error(json.error || 'Failed to load school config');
+                }
+
+                if (!cancelled) {
+                    setConfiguredSchools(json.data ?? []);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    console.error('Failed to load school config:', err);
+                    setConfiguredSchools([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsConfigLoading(false);
+                }
+            }
+        };
+
+        loadConfiguredSchools();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedSport]);
 
     useEffect(() => {
         setRosterData([]);
@@ -66,6 +106,7 @@ export default function Home() {
         setCustomPlatform('sidearm');
         setGtechPastedStats('');
         setCustomPastedStats('');
+        setEditingSchoolId('');
     }, [selectedSport]);
 
     // Reset custom form when toggling on (clears stale data from previous entries)
@@ -77,6 +118,7 @@ export default function Home() {
             setCustomStatsUrl('');
             setCustomPlatform('sidearm');
             setCustomPastedStats('');
+            setEditingSchoolId('');
         }
     }, []);
 
@@ -85,10 +127,10 @@ export default function Home() {
             ? customRosterUrl && customPastedStats.trim()
             : customRosterUrl && customStatsUrl
         : isGtechSchool
-            ? selectedSchool && gtechPastedStats.trim()
+            ? selectedSchool && gtechPastedStats.trim() && !isConfigLoading
             : isHybridSchool
-                ? selectedSchool && gtechPastedStats.trim()
-                : selectedSchool;
+                ? selectedSchool && gtechPastedStats.trim() && !isConfigLoading
+                : selectedSchool && !isConfigLoading;
 
     const hasData = rosterData.length > 0;
 
@@ -97,8 +139,9 @@ export default function Home() {
     const StatsViewComponent = sportConfig.StatsViewComponent;
 
     // Handle editing a school from the info popover
-    const handleEditSchool = useCallback((school: { name: string; rosterUrl: string; statsUrl: string; platform?: 'gtech' | 'wmt' | 'hybrid' }) => {
+    const handleEditSchool = useCallback((school: { id?: string; name: string; rosterUrl: string; statsUrl: string; platform?: 'sidearm' | 'gtech' | 'wmt' | 'hybrid' }) => {
         setUseCustomUrls(true);
+        setEditingSchoolId(school.id || '');
         setCustomSchoolName(school.name);
         setCustomRosterUrl(school.rosterUrl);
         setCustomStatsUrl(school.statsUrl);
@@ -135,12 +178,9 @@ export default function Home() {
                         effectivePlatform = savedOverride.platform;
                     }
                 } else {
-                    const school = getSchoolById(selectedSchool);
+                    const school = configuredSchools.find((item) => item.id === selectedSchool);
                     if (!school) {
                         throw new Error('School not found');
-                    }
-                    if (!school.sports.includes(selectedSport)) {
-                        throw new Error(`${school.name} does not have ${selectedSport} configured`);
                     }
                 }
             }
@@ -213,6 +253,7 @@ export default function Home() {
             // Save to localStorage only if BOTH roster and stats loaded successfully
             if (roster.length > 0 && statsLoaded && useCustomUrls && customSchoolName.trim()) {
                 saveSchool({
+                    id: editingSchoolId || undefined,
                     name: customSchoolName.trim(),
                     sport: selectedSport,
                     rosterUrl: customRosterUrl,
@@ -290,11 +331,12 @@ export default function Home() {
                                 {!useCustomUrls ? (
                                     <div className="space-y-2">
                                         <Label className="text-sm text-muted-foreground">School</Label>
-                                        <SchoolCombobox
+                                        <ConfiguredSchoolCombobox
                                             key={comboboxKey}
                                             value={selectedSchool}
                                             onValueChange={setSelectedSchool}
                                             sport={selectedSport}
+                                            configuredSchools={configuredSchools}
                                             onEditSchool={handleEditSchool}
                                             onSchoolDeleted={handleSchoolDeleted}
                                         />
@@ -331,6 +373,7 @@ export default function Home() {
                                         sport={selectedSport}
                                         pastedStats={gtechPastedStats}
                                         onStatsChange={setGtechPastedStats}
+                                        helperUrl={selectedSchoolHelperUrl}
                                     />
                                 )}
 

@@ -86,11 +86,14 @@ export function hasCustomOverride(id: string, sport: SportType): boolean {
 }
 
 /**
- * Save or update a school in localStorage
- * If a school with the same ID and sport exists, it will be overwritten
+ * Save or update a school in localStorage.
+ * If `id` is provided, preserve it so edits continue to override the same school.
+ * Otherwise we derive a custom-only ID from the name.
  */
-export function saveSchool(school: Omit<SavedSchool, 'id' | 'savedAt'> & { name: string }): SavedSchool {
-    const id = slugify(school.name);
+export function saveSchool(
+    school: Omit<SavedSchool, 'id' | 'savedAt'> & { id?: string; name: string }
+): SavedSchool {
+    const id = school.id?.trim() || slugify(school.name);
     const savedSchool: SavedSchool = {
         ...school,
         id,

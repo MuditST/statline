@@ -22,6 +22,8 @@ interface StatsPasteDialogProps {
     onStatsChange: (text: string) => void;
     /** If true, show GT-specific PDF URL link. Default false. */
     showGtechPdfLink?: boolean;
+    /** Optional helper link for hybrid stats pages or PDFs. */
+    helperUrl?: string;
 }
 
 /**
@@ -41,6 +43,7 @@ export function StatsPasteDialog({
     pastedStats,
     onStatsChange,
     showGtechPdfLink = false,
+    helperUrl = '',
 }: StatsPasteDialogProps) {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [pdfUrlLoading, setPdfUrlLoading] = useState(false);
@@ -145,15 +148,40 @@ export function StatsPasteDialog({
                 ) : (
                     // Generic hybrid instructions
                     <>
-                        Open the team&apos;s stats PDF or stats page, select all text (
-                        <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
-                            Ctrl+A
-                        </kbd>
-                        ), copy (
-                        <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
-                            Ctrl+C
-                        </kbd>
-                        ), then press the Paste button below.
+                        {helperUrl ? (
+                            <>
+                                <a
+                                    href={helperUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                                >
+                                    Open the stats page or PDF
+                                    <ExternalLink className="h-3 w-3" />
+                                </a>
+                                , then select all text (
+                                <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                                    Ctrl+A
+                                </kbd>
+                                ), copy (
+                                <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                                    Ctrl+C
+                                </kbd>
+                                ), and press the Paste button below.
+                            </>
+                        ) : (
+                            <>
+                                Open the team&apos;s stats PDF or stats page, select all text (
+                                <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                                    Ctrl+A
+                                </kbd>
+                                ), copy (
+                                <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-mono">
+                                    Ctrl+C
+                                </kbd>
+                                ), then press the Paste button below.
+                            </>
+                        )}
                     </>
                 )}
             </p>

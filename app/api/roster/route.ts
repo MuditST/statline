@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractRoster, type RosterPlayer } from '@/lib/roster/extractor';
-import { getSchoolById } from '@/config/schools';
 import { fetchRosterWithFallback, generateRosterUrls } from '@/lib/url/generator';
 import type { SportType } from '@/types';
+import { getConfiguredSchoolOption, getPresetSchoolConfig } from '@/lib/schools/resolved';
 
 export interface RosterResponse {
     success: boolean;
@@ -32,45 +32,50 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            const school = getSchoolById(schoolId);
-            if (!school) {
+            const configuredSchool = await getConfiguredSchoolOption(schoolId, sport);
+            if (!configuredSchool) {
                 return NextResponse.json<RosterResponse>(
                     { success: false, error: `School not found: ${schoolId}` },
                     { status: 404 }
                 );
             }
 
-            if (!school.sports.includes(sport)) {
-                return NextResponse.json<RosterResponse>(
-                    { success: false, error: `Sport not configured for ${school.name}: ${sport}` },
-                    { status: 404 }
-                );
-            }
+            if (configuredSchool.source === 'sheet') {
+                rosterUrl = configuredSchool.rosterUrl;
+            } else {
+                const school = getPresetSchoolConfig(schoolId);
+                if (!school) {
+                    return NextResponse.json<RosterResponse>(
+                        { success: false, error: `School not found: ${schoolId}` },
+                        { status: 404 }
+                    );
+                }
 
-            // Use direct roster URL if the school has one configured (e.g. Georgia Tech)
-            if (school.rosterUrls?.[sport]) {
-                const directUrl = school.rosterUrls[sport]!;
-                const players = await extractRoster(directUrl);
-                return NextResponse.json<RosterResponse>({
-                    success: true,
-                    data: players,
-                });
-            }
+                // Use direct roster URL if the school has one configured (e.g. Georgia Tech)
+                if (school.rosterUrls?.[sport]) {
+                    const directUrl = school.rosterUrls[sport]!;
+                    const players = await extractRoster(directUrl);
+                    return NextResponse.json<RosterResponse>({
+                        success: true,
+                        data: players,
+                    });
+                }
 
-            // Try auto-detecting the roster URL format (Sidearm schools)
-            const result = await fetchRosterWithFallback(school.domain, sport);
-            if (result) {
-                // We got the HTML directly, extract roster from it
-                const players = await extractRoster(result.url);
-                return NextResponse.json<RosterResponse>({
-                    success: true,
-                    data: players,
-                });
-            }
+                // Try auto-detecting the roster URL format (Sidearm schools)
+                const result = await fetchRosterWithFallback(school.domain, sport);
+                if (result) {
+                    // We got the HTML directly, extract roster from it
+                    const players = await extractRoster(result.url);
+                    return NextResponse.json<RosterResponse>({
+                        success: true,
+                        data: players,
+                    });
+                }
 
-            // Fallback: try the first generated URL
-            const urls = generateRosterUrls(school.domain, sport);
-            rosterUrl = urls[0];
+                // Fallback: try the first generated URL
+                const urls = generateRosterUrls(school.domain, sport);
+                rosterUrl = urls[0];
+            }
         }
 
         // Extract roster data

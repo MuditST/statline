@@ -26,8 +26,9 @@ interface SchoolInfoPopoverProps {
     schoolName: string;
     rosterUrl: string;
     statsUrl: string;
-    isCustomized: boolean;
-    platform?: 'gtech' | 'wmt' | 'hybrid';
+    helperUrl: string;
+    source: 'config' | 'sheet' | 'custom';
+    platform?: 'sidearm' | 'gtech' | 'wmt' | 'hybrid';
     onEdit: () => void;
     onDelete?: () => void;
     disabled?: boolean;
@@ -37,13 +38,15 @@ export function SchoolInfoPopover({
     schoolName,
     rosterUrl,
     statsUrl,
-    isCustomized,
+    helperUrl,
+    source,
     platform,
     onEdit,
     onDelete,
     disabled = false,
 }: SchoolInfoPopoverProps) {
     const [open, setOpen] = React.useState(false);
+    const isCustomized = source === 'custom';
 
     const handleEdit = () => {
         setOpen(false);
@@ -95,9 +98,13 @@ export function SchoolInfoPopover({
                                     Hybrid
                                 </Badge>
                             )}
-                            {isCustomized ? (
+                            {source === 'custom' ? (
                                 <Badge variant="secondary" className="text-xs">
                                     Custom
+                                </Badge>
+                            ) : source === 'sheet' ? (
+                                <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                    Sheet
                                 </Badge>
                             ) : (
                                 <Badge variant="outline" className="text-xs">
@@ -129,7 +136,19 @@ export function SchoolInfoPopover({
                         {(platform === 'hybrid' || platform === 'gtech') ? (
                             <div className="space-y-1">
                                 <p className="text-xs font-medium text-muted-foreground">Stats</p>
-                                <p className="text-sm text-muted-foreground">Pasted manually</p>
+                                {helperUrl ? (
+                                    <a
+                                        href={helperUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
+                                    >
+                                        Open stats page / PDF
+                                        <ExternalLink className="h-3 w-3 shrink-0" />
+                                    </a>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">Pasted manually</p>
+                                )}
                             </div>
                         ) : (
                             <div className="space-y-1">
@@ -150,7 +169,7 @@ export function SchoolInfoPopover({
                     </div>
 
                     {/* Note for Sidearm config schools about fallback */}
-                    {!isCustomized && !platform && (
+                    {source === 'config' && platform === 'sidearm' && (
                         <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
                             <CircleAlert className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                             <span>Config URLs try current year first, then fall back to previous year if not found.</span>

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchAndParsePdf } from '@/lib/pdf/parser';
-import { getSchoolById } from '@/config/schools';
 import { generateStatsUrls } from '@/lib/url/generator';
 import type { SportType } from '@/types';
+import { getConfiguredSchoolOption, getPresetSchoolConfig } from '@/lib/schools/resolved';
 
 export interface PdfResponse {
     success: boolean;
@@ -103,17 +103,102 @@ export async function POST(request: NextRequest) {
 
         // ===== Configured school =====
         if (schoolId && sport) {
-            const school = getSchoolById(schoolId);
-            if (!school) {
+            const configuredSchool = await getConfiguredSchoolOption(schoolId, sport);
+            if (!configuredSchool) {
                 return NextResponse.json<PdfResponse>(
                     { success: false, error: `School not found: ${schoolId}` },
                     { status: 404 }
                 );
             }
 
-            if (!school.sports.includes(sport)) {
+            if (configuredSchool.source === 'sheet') {
+                if (configuredSchool.platform === 'wmt') {
+                    const { resolveWmtTeamId, parseWmtBaseballApi, parseWmtBasketballApi, parseWmtVolleyballApi } =
+                        await import('@/lib/parsers/wmt-api');
+
+                    const teamId = await resolveWmtTeamId(configuredSchool.statsUrl);
+
+                    if (sport === 'baseball' || sport === 'softball') {
+                        const players = await parseWmtBaseballApi(teamId);
+                        return NextResponse.json({ success: true, type: 'gtech', data: players });
+                    }
+                    if (sport === 'mens-basketball' || sport === 'womens-basketball') {
+                        const { players } = await parseWmtBasketballApi(teamId);
+                        return NextResponse.json({ success: true, type: 'basketball', data: { players } });
+                    }
+                    if (sport === 'womens-volleyball') {
+                        const { players } = await parseWmtVolleyballApi(teamId);
+                        return NextResponse.json({ success: true, type: 'volleyball', data: { players } });
+                    }
+
+                    return NextResponse.json<PdfResponse>(
+                        { success: false, error: `WMT not supported for ${sport} yet` },
+                        { status: 404 }
+                    );
+                }
+
+                if (configuredSchool.platform === 'hybrid') {
+                    if (!pastedStats?.trim()) {
+                        return NextResponse.json<PdfResponse>(
+                            { success: false, error: 'Hybrid stats require pasted text. Open the stats PDF or stats page, select all (Ctrl+A), copy (Ctrl+C), and paste via the Paste button.' },
+                            { status: 400 }
+                        );
+                    }
+
+                    if (sport === 'baseball' || sport === 'softball') {
+                        const { parseHybridStats } = await import('@/lib/parsers/hybrid-parser');
+                        const { batting, pitching } = parseHybridStats(pastedStats);
+                        return NextResponse.json({
+                            success: true,
+                            type: 'baseball',
+                            data: { batting, pitching },
+                        });
+                    }
+
+                    return NextResponse.json<PdfResponse>(
+                        { success: false, error: `Hybrid paste not supported for ${sport} yet` },
+                        { status: 400 }
+                    );
+                }
+
+                if (sport === 'mens-soccer' || sport === 'womens-soccer') {
+                    const { parseSoccerPdf } = await import('@/lib/parsers/soccer');
+                    const { players, goalies } = await parseSoccerPdf(configuredSchool.statsUrl);
+                    return NextResponse.json({ success: true, type: 'soccer', data: { players, goalies } });
+                }
+
+                if (sport === 'mens-basketball' || sport === 'womens-basketball') {
+                    const { parseBasketballPdf } = await import('@/lib/parsers/basketball');
+                    const { players } = await parseBasketballPdf(configuredSchool.statsUrl);
+                    return NextResponse.json({ success: true, type: 'basketball', data: { players } });
+                }
+
+                if (sport === 'womens-volleyball') {
+                    const { parseVolleyballPdf } = await import('@/lib/parsers/volleyball');
+                    const { players } = await parseVolleyballPdf(configuredSchool.statsUrl);
+                    return NextResponse.json({ success: true, type: 'volleyball', data: { players } });
+                }
+
+                if (sport === 'football') {
+                    const { parseFootballPdf } = await import('@/lib/parsers/football');
+                    const { players } = await parseFootballPdf(configuredSchool.statsUrl);
+                    return NextResponse.json({ success: true, type: 'football', data: { players } });
+                }
+
+                const text = await fetchAndParsePdf(configuredSchool.statsUrl);
+                const { parsePdfStats } = await import('@/lib/parsers/baseball');
+                const { batting, pitching } = parsePdfStats(text);
+                return NextResponse.json({
+                    success: true,
+                    type: 'baseball',
+                    data: { batting, pitching },
+                });
+            }
+
+            const school = getPresetSchoolConfig(schoolId);
+            if (!school) {
                 return NextResponse.json<PdfResponse>(
-                    { success: false, error: `Sport not configured for ${school.name}: ${sport}` },
+                    { success: false, error: `School not found: ${schoolId}` },
                     { status: 404 }
                 );
             }
