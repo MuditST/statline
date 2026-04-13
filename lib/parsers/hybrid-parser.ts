@@ -23,25 +23,100 @@ const COLUMN_ALIASES: Record<string, string> = {
     'so': 'so', 'k': 'so',
     'gdp': 'gdp', 'ob%': '_skip', 'obp': '_skip',
     'sf': 'sf', 'sh': 'sh', 'sb-att': 'sb-att',
+    'sb/att': 'sb-att',
     'po': '_skip', 'a': '_skip', 'e': '_skip', 'fld%': '_skip',
     'era': 'era', 'w-l': 'w-l',
     'app': 'app', 'gs': 'gs', 'cg': 'cg',
-    'sho': 'sho', 'sv': 'sv', 'ip': 'ip', 'er': 'er',
+    'sho': 'sho', 'sho/cbo': 'sho', 'sv': 'sv', 'ip': 'ip', 'er': 'er',
     'whip': '_skip', 'b/avg': '_skip', 'avg_p': '_skip',
     'wp': '_skip', 'bk': '_skip', 'sfa': '_skip', 'sha': '_skip',
 };
 
 interface ColumnMap { [canonical: string]: number; }
 
-/** Parse header line into column map. Skips first token ("Player"/"PLAYER"). */
+type HeaderKind = 'batting' | 'pitching' | 'fielding';
+
+interface HeaderInfo {
+    kind: HeaderKind;
+    colMap: ColumnMap;
+    statTokenCount: number;
+}
+
+const HEADER_PREFIX_TOKENS = new Set(['#', '##']);
+const HEADER_LABEL_TOKENS = new Set(['player', 'name', 'jersey', 'number', 'no', 'no.']);
+
+function normalizeHeaderToken(token: string): string {
+    return token
+        .trim()
+        .toLowerCase()
+        .replace(/^[^a-z0-9#]+|[^a-z0-9%/#.-]+$/g, '')
+        .replace(/^\.+|\.+$/g, '');
+}
+
+function tokenizeHeaderLine(line: string): string[] {
+    return line
+        .trim()
+        .split(/\s+/)
+        .map(normalizeHeaderToken)
+        .filter(Boolean);
+}
+
+function getHeaderStatTokens(line: string): string[] {
+    const tokens = tokenizeHeaderLine(line);
+    let index = 0;
+
+    while (index < tokens.length && HEADER_PREFIX_TOKENS.has(tokens[index])) {
+        index += 1;
+    }
+
+    while (index < tokens.length && HEADER_LABEL_TOKENS.has(tokens[index])) {
+        index += 1;
+    }
+
+    return tokens.slice(index);
+}
+
 function parseHeaderLine(headerLine: string): ColumnMap {
-    const tokens = headerLine.trim().split(/\s+/).map(t => t.toLowerCase());
+    const tokens = getHeaderStatTokens(headerLine);
     const map: ColumnMap = {};
-    for (let i = 1; i < tokens.length; i++) {
+    for (let i = 0; i < tokens.length; i++) {
         const canonical = COLUMN_ALIASES[tokens[i]] || tokens[i];
-        if (canonical !== '_skip') map[canonical] = i - 1;
+        if (canonical !== '_skip') map[canonical] = i;
     }
     return map;
+}
+
+function detectHeaderKind(line: string): HeaderInfo | null {
+    const statTokens = getHeaderStatTokens(line);
+    if (statTokens.length < 3) {
+        return null;
+    }
+
+    const canonicalTokens = statTokens.map(token => COLUMN_ALIASES[token] || token);
+    const tokenSet = new Set(canonicalTokens);
+
+    const isBattingHeader = tokenSet.has('avg')
+        && tokenSet.has('gp-gs')
+        && tokenSet.has('ab');
+    const isPitchingHeader = tokenSet.has('era')
+        && tokenSet.has('w-l')
+        && (tokenSet.has('app') || tokenSet.has('ip'));
+    const isFieldingHeader = tokenSet.has('fld%')
+        && tokenSet.has('po')
+        && tokenSet.has('a')
+        && tokenSet.has('e')
+        && !isBattingHeader
+        && !isPitchingHeader;
+
+    if (!isBattingHeader && !isPitchingHeader && !isFieldingHeader) {
+        return null;
+    }
+
+    return {
+        kind: isBattingHeader ? 'batting' : isPitchingHeader ? 'pitching' : 'fielding',
+        colMap: parseHeaderLine(line),
+        statTokenCount: statTokens.length,
+    };
 }
 
 /**
@@ -82,7 +157,7 @@ interface ParsedPlayerLine {
 function parsePlayerLine(line: string): ParsedPlayerLine | null {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('---')) return null;
-    if (/^(player\s|#\s)/i.test(trimmed)) return null;
+    if (/^(player|name|jersey|number|no\.?|#|##)\b/i.test(trimmed)) return null;
     if (/^(totals|opponents|others)\b/i.test(trimmed)) return null;
     if (/^(lob|pb|dp|ibb|picked|sba)/i.test(trimmed)) return null;
     if (/^(record:|overall|\(as of|\(all games)/i.test(trimmed)) return null;
@@ -112,6 +187,16 @@ function parsePlayerLine(line: string): ParsedPlayerLine | null {
             jerseyNumber: '',
             name: gtMatch[1].trim(),
             statsTokens: gtMatch[2].trim().split(/\s+/),
+        };
+    }
+
+    // Format 3: Name first, no jersey column
+    const nameFirstMatch = trimmed.match(/^(.+?)\s+(\.\d{3}|\d+\.\d{2,3})\s+(.+)$/);
+    if (nameFirstMatch) {
+        return {
+            jerseyNumber: '',
+            name: nameFirstMatch[1].trim(),
+            statsTokens: `${nameFirstMatch[2]} ${nameFirstMatch[3]}`.trim().split(/\s+/),
         };
     }
 
@@ -171,42 +256,25 @@ export function parseHybridStats(text: string): {
     // First pass: find headers and detect normalization need
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
+        const headerInfo = detectHeaderKind(line);
+        if (!headerInfo || headerInfo.kind === 'fielding') continue;
 
-        const isBattingSection = /sorted by batting avg/i.test(line)
-            || (line.includes('PLAYER') && line.includes('AVG') && line.includes('GP-GS'));
-        const isPitchingSection = /sorted by earned run avg/i.test(line)
-            || (line.includes('PLAYER') && line.includes('ERA') && line.includes('W-L'));
-
-        if (!isBattingSection && !isPitchingSection) continue;
-
-        // Find header line
-        for (let j = i; j < Math.min(i + 5, lines.length); j++) {
-            const headerLine = lines[j].trim();
-            if (!headerLine || !/^(player|#)/i.test(headerLine)) continue;
-
-            const colMap = parseHeaderLine(headerLine);
-            const headerTokenCount = headerLine.split(/\s+/).length;
-
-            if (isBattingSection) battingColMap = colMap;
-            else pitchingColMap = colMap;
-
-            // Sample player lines for normalization detection
-            const sampleLines: string[] = [];
-            for (let k = j + 1; k < Math.min(j + 6, lines.length); k++) {
-                const pl = lines[k].trim();
-                if (pl && !pl.startsWith('---') && !/^(totals|opponents)/i.test(pl) && pl.length > 10) {
-                    sampleLines.push(pl);
-                }
-            }
-            if (detectNormalizationNeeded(headerTokenCount, sampleLines)) {
-                needsNormalization = true;
-            }
-            break;
+        if (headerInfo.kind === 'batting') {
+            battingColMap = headerInfo.colMap;
+        } else {
+            pitchingColMap = headerInfo.colMap;
         }
 
-        // GT: header line IS the section line
-        if (isBattingSection && /^player/i.test(line)) battingColMap = parseHeaderLine(line);
-        if (isPitchingSection && /^player/i.test(line)) pitchingColMap = parseHeaderLine(line);
+        const sampleLines: string[] = [];
+        for (let k = i + 1; k < Math.min(i + 6, lines.length); k++) {
+            const pl = lines[k].trim();
+            if (pl && !pl.startsWith('---') && !/^(totals|opponents)/i.test(pl) && pl.length > 10) {
+                sampleLines.push(pl);
+            }
+        }
+        if (detectNormalizationNeeded(headerInfo.statTokenCount, sampleLines)) {
+            needsNormalization = true;
+        }
     }
 
     const processedText = needsNormalization ? normalizeSpacedNumbers(text) : text;
@@ -217,21 +285,21 @@ export function parseHybridStats(text: string): {
 
     for (const line of processedLines) {
         const trimmed = line.trim();
+        const headerInfo = detectHeaderKind(trimmed);
 
-        if (/sorted by batting avg/i.test(trimmed)
-            || (trimmed.includes('PLAYER') && trimmed.includes('AVG') && trimmed.includes('GP-GS'))) {
-            section = 'batting'; continue;
-        }
-        if (/sorted by earned run avg/i.test(trimmed)
-            || (trimmed.includes('PLAYER') && trimmed.includes('ERA') && trimmed.includes('W-L'))) {
-            section = 'pitching'; continue;
-        }
-        if (/sorted by fielding/i.test(trimmed)
-            || (trimmed.includes('PLAYER') && trimmed.includes('FLD%') && !trimmed.includes('AVG') && !trimmed.includes('ERA'))) {
-            section = 'none'; continue;
+        if (headerInfo) {
+            if (headerInfo.kind === 'batting') {
+                battingColMap = headerInfo.colMap;
+                section = 'batting';
+            } else if (headerInfo.kind === 'pitching') {
+                pitchingColMap = headerInfo.colMap;
+                section = 'pitching';
+            } else {
+                section = 'none';
+            }
+            continue;
         }
 
-        if (/^(player|#)/i.test(trimmed)) continue;
         if (section === 'none') continue;
 
         const parsed = parsePlayerLine(trimmed);
@@ -322,19 +390,13 @@ export function validateHybridPastedStats(text: string): {
     hasPitching: boolean;
     message: string;
 } {
-    const lines = text.split('\n');
+    const headers = text
+        .split('\n')
+        .map(line => detectHeaderKind(line))
+        .filter((header): header is HeaderInfo => header !== null);
 
-    const hasBatting = lines.some(l => {
-        const lower = l.toLowerCase();
-        return (lower.includes('player') && lower.includes('avg') && lower.includes('ab'))
-            || lower.includes('sorted by batting avg');
-    });
-
-    const hasPitching = lines.some(l => {
-        const lower = l.toLowerCase();
-        return (lower.includes('player') && lower.includes('era') && lower.includes('ip'))
-            || lower.includes('sorted by earned run avg');
-    });
+    const hasBatting = headers.some(header => header.kind === 'batting');
+    const hasPitching = headers.some(header => header.kind === 'pitching');
 
     if (hasBatting && hasPitching) return { valid: true, hasBatting: true, hasPitching: true, message: 'Stats found' };
     if (hasBatting) return { valid: true, hasBatting: true, hasPitching: false, message: 'Batting found (pitching missing)' };

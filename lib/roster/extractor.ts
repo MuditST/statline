@@ -18,6 +18,28 @@ export interface RosterPlayer {
     age: string;       // May be empty (MM/DD/YY format)
 }
 
+type CheerioSelection = cheerio.Cheerio<any>;
+
+interface SidearmEmbeddedPlayer {
+    first_name?: string;
+    last_name?: string;
+    hometown?: string | null;
+    highschool?: string | null;
+    previous_school?: string | null;
+    weight?: number | string | null;
+    height_feet?: number | string | null;
+    height_inches?: number | string | null;
+    position_short?: string | null;
+    position_long?: string | null;
+    jersey_number?: string | null;
+    jersey_number_2?: string | null;
+    academic_year_short?: string | null;
+    academic_year_number?: number | string | null;
+    custom1?: string | null;
+    custom2?: string | null;
+    custom3?: string | null;
+}
+
 /**
  * Abbreviate spelled-out position names (WMT rosters use "Guard", "Forward", etc.)
  * Sidearm rosters already use abbreviations (G, F, C) — those pass through unchanged.
@@ -87,37 +109,48 @@ export async function extractRoster(url: string): Promise<RosterPlayer[]> {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    const players: RosterPlayer[] = [];
-
     // Find the roster table - look for table with jersey number column
     const tables = $('table');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let rosterTableEl: any = null;
+    let rosterTable: CheerioSelection | null = null;
 
     tables.each((_, table) => {
-        const headerRow = $(table).find('tr').first();
+        const candidateTable = $(table);
+        const headerRow = candidateTable.find('tr').first();
         const headers: string[] = [];
         headerRow.find('th, td').each((__, el) => {
             headers.push($(el).text().trim().toLowerCase());
         });
 
         // Check if this table has roster-like headers
-        const hasJerseyCol = headers.some((h: string) => h === '#' || h === 'no.' || h === 'no' || h === 'number' || h.startsWith('#') || h.includes('jersey'));
-        const hasNameCol = headers.some((h: string) => h.includes('name'));
+        const hasJerseyCol = headers.some((h: string) => h === '#' || h === 'no.' || h === 'no' || h === 'num' || h === 'number' || h.startsWith('#') || h.includes('jersey'));
+        const hasNameCol = headers.some((h: string) => h.includes('name') || h.includes('player'));
 
         if (hasJerseyCol && hasNameCol) {
-            rosterTableEl = table;
+            rosterTable = candidateTable;
             return false; // break
         }
     });
-
-    if (!rosterTableEl) {
-        throw new Error('Could not find roster table on page');
+    const tablePlayers = rosterTable ? extractRosterFromTable($, rosterTable) : [];
+    if (tablePlayers.length > 0) {
+        return sortRosterPlayers(tablePlayers);
     }
 
-    const rosterTable = $(rosterTableEl);
+    const embeddedPlayers = extractRosterFromEmbeddedSidearmJson(html);
+    if (embeddedPlayers.length > 0) {
+        return sortRosterPlayers(embeddedPlayers);
+    }
 
-    // Get header indices
+    const cardPlayers = extractRosterFromRenderedCards($);
+    if (cardPlayers.length > 0) {
+        return sortRosterPlayers(cardPlayers);
+    }
+
+    throw new Error('Could not find roster data on page');
+}
+
+function extractRosterFromTable($: cheerio.CheerioAPI, rosterTable: CheerioSelection): RosterPlayer[] {
+    const players: RosterPlayer[] = [];
+
     const headerRow = rosterTable.find('tr').first();
     const headers: string[] = [];
     headerRow.find('th, td').each((_, el) => {
@@ -131,21 +164,20 @@ export async function extractRoster(url: string): Promise<RosterPlayer[]> {
         });
     };
 
-    const jerseyIdx = getIndex(['#', 'no.', 'no', 'number']);
-    const nameIdx = getIndex(['name', 'full name'], jerseyIdx);  // skip jersey col
+    const jerseyIdx = getIndex(['#', 'no.', 'no', 'num', 'number']);
+    const nameIdx = getIndex(['name', 'full name', 'player'], jerseyIdx);
     const posIdx = getIndex(['pos', 'position']);
-    const htIdx = getIndex(['ht', 'height']);
-    const wtIdx = getIndex(['wt', 'weight']);
+    const htIdx = getIndex(['ht', 'height', 'hgt']);
+    const wtIdx = getIndex(['wt', 'weight', 'wgt']);
     const yearIdx = getIndex(['year', 'academic', 'yr', 'cl.', 'cl', 'class', 'elig']);
     const hometownIdx = getIndex(['hometown', 'high school']);
-    const btIdx = getIndex(['b/t', 'bats']);
+    const btIdx = getIndex(['b/t', 'bats', 'throws', 'custom field 1']);
 
-    // Parse each row
-    const rows = rosterTable.find('tr').slice(1); // skip header
+    const rows = rosterTable.find('tr').slice(1);
 
     rows.each((_, row) => {
         const cells = $(row).find('td, th');
-        if (cells.length < 3) return; // skip empty rows
+        if (cells.length < 3) return;
 
         const getText = (idx: number): string => {
             if (idx < 0 || idx >= cells.length) return '';
@@ -160,7 +192,6 @@ export async function extractRoster(url: string): Promise<RosterPlayer[]> {
         const year = getText(yearIdx);
         const hometownFull = getText(hometownIdx);
 
-        // Parse B/T column if available (e.g. "R/R", "L/R")
         const btRaw = getText(btIdx);
         let bats = '';
         let throws_ = '';
@@ -170,16 +201,10 @@ export async function extractRoster(url: string): Promise<RosterPlayer[]> {
             throws_ = t.trim();
         }
 
-        // Skip if no name (jersey number may be empty for some schools)
         if (!fullName) return;
 
-        // Parse name into first/last
         const nameParts = splitName(fullName);
-
-        // Parse hometown/state/high school
         const locationParts = parseHometown(hometownFull);
-
-        // Combine city and state for display (e.g., "Gulf Shores, Ala")
         const hometownDisplay = locationParts.state
             ? `${locationParts.city}, ${locationParts.state}`
             : locationParts.city;
@@ -196,11 +221,368 @@ export async function extractRoster(url: string): Promise<RosterPlayer[]> {
             height: formatHeight(height),
             weight: weight,
             year: yearToNumber(year),
-            age: '',       // Not available from print roster
+            age: '',
         });
     });
 
-    // Sort by jersey number - 0 and 00 go to the end
+    return players;
+}
+
+function extractRosterFromEmbeddedSidearmJson(html: string): RosterPlayer[] {
+    const players = findEmbeddedSidearmPlayers(html);
+    if (!players) {
+        return [];
+    }
+
+    return players
+        .map(mapEmbeddedSidearmPlayer)
+        .filter((player): player is RosterPlayer => player !== null);
+}
+
+function extractRosterFromRenderedCards($: cheerio.CheerioAPI): RosterPlayer[] {
+    const oldSidearmPlayers = extractRosterFromOldSidearmCards($);
+    if (oldSidearmPlayers.length > 0) {
+        return oldSidearmPlayers;
+    }
+
+    return extractRosterFromModernCards($);
+}
+
+function extractRosterFromOldSidearmCards($: cheerio.CheerioAPI): RosterPlayer[] {
+    const players: RosterPlayer[] = [];
+
+    $('li.sidearm-roster-player').each((_, card) => {
+        const cardEl = $(card);
+        const fullName = cleanText(
+            cardEl.find('.sidearm-roster-player-name a').first().text()
+            || cardEl.find('.sidearm-roster-player-name').first().text()
+        );
+
+        if (!fullName) {
+            return;
+        }
+
+        const number = cleanText(cardEl.find('.sidearm-roster-player-jersey-number').first().text());
+        const metaTexts = cardEl.find('.sidearm-roster-player-position span')
+            .map((__, el) => cleanText($(el).text()))
+            .get()
+            .filter(Boolean);
+
+        const position = metaTexts.find(value => isPositionLike(value)) || '';
+        const year = metaTexts.find(value => yearToNumber(value) !== '') || '';
+        const height = metaTexts.find(value => /'|\d+-\d+/.test(value)) || '';
+        const weight = metaTexts.find(value => /\d/.test(value) && /lb/i.test(value) || /^\d+$/.test(value)) || '';
+        const btRaw = metaTexts.find(value => isBtLike(value)) || '';
+        const [bats = '', throws_ = ''] = btRaw.split('/').map(value => value.trim());
+        const hometown = cleanText(cardEl.find('.sidearm-roster-player-hometown').first().text());
+        const highSchool = cleanText(cardEl.find('.sidearm-roster-player-highschool').first().text())
+            || cleanText(cardEl.find('.sidearm-roster-player-previous-school').first().text());
+
+        const player = buildRosterPlayer({
+            fullName,
+            number,
+            position: normalizePositionValue(position),
+            bats,
+            throws: throws_,
+            hometown,
+            highSchool,
+            height,
+            weight: normalizeWeight(weight),
+            year,
+        });
+
+        if (player) {
+            players.push(player);
+        }
+    });
+
+    return players;
+}
+
+function extractRosterFromModernCards($: cheerio.CheerioAPI): RosterPlayer[] {
+    const players: RosterPlayer[] = [];
+
+    $('[data-test-id="s-person-card-list__root"], .s-person-card--list').each((_, card) => {
+        const cardEl = $(card);
+        const fullName = cleanText(cardEl.find('h3').first().text());
+
+        if (!fullName) {
+            return;
+        }
+
+        const number = stripFieldLabel(
+            cleanText(cardEl.find('.s-stamp__text').first().text()),
+            ['Jersey Number']
+        );
+        const position = stripFieldLabel(
+            cleanText(cardEl.find('[data-test-id="s-person-details__bio-stats-person-position-short"]').first().text()),
+            ['Position']
+        );
+        const year = stripFieldLabel(
+            cleanText(cardEl.find('[data-test-id="s-person-details__bio-stats-person-title"]').first().text()),
+            ['Academic Year', 'Class', 'Year']
+        );
+        const height = stripFieldLabel(
+            cleanText(cardEl.find('[data-test-id="s-person-details__bio-stats-person-season"]').first().text()),
+            ['Height', 'Season']
+        );
+        const weight = stripFieldLabel(
+            cleanText(cardEl.find('[data-test-id="s-person-details__bio-stats-person-weight"]').first().text()),
+            ['Weight']
+        ).replace(/\s*lbs?\.?$/i, '');
+        const btRaw = cardEl.find('.s-person-details__bio-stats-item')
+            .map((__, el) => stripFieldLabel(cleanText($(el).text()), ['B/T', 'Throws', 'Bats']))
+            .get()
+            .find(value => isBtLike(value)) || '';
+        const [bats = '', throws_ = ''] = btRaw.split('/').map(value => value.trim());
+        const hometown = stripFieldLabel(
+            cleanText(cardEl.find('[data-test-id="s-person-card-list__content-location-person-hometown"]').first().text()),
+            ['Hometown']
+        );
+        const highSchool = stripFieldLabel(
+            cleanText(cardEl.find('[data-test-id="s-person-card-list__content-location-person-high-school"]').first().text()),
+            ['High School', 'Previous School']
+        );
+
+        if (!number && !position && !year) {
+            return;
+        }
+
+        const player = buildRosterPlayer({
+            fullName,
+            number,
+            position: normalizePositionValue(position),
+            bats,
+            throws: throws_,
+            hometown,
+            highSchool,
+            height,
+            weight: normalizeWeight(weight),
+            year,
+        });
+
+        if (player) {
+            players.push(player);
+        }
+    });
+
+    return players;
+}
+
+function findEmbeddedSidearmPlayers(html: string): SidearmEmbeddedPlayer[] | null {
+    const key = '"players":[';
+    let startIndex = html.indexOf(key);
+
+    while (startIndex >= 0) {
+        const arrayStart = html.indexOf('[', startIndex);
+        if (arrayStart < 0) {
+            return null;
+        }
+
+        const arrayEnd = findMatchingBracketIndex(html, arrayStart);
+        if (arrayEnd < 0) {
+            return null;
+        }
+
+        const rawArray = html.slice(arrayStart, arrayEnd + 1);
+
+        try {
+            const parsed = JSON.parse(rawArray);
+            if (
+                Array.isArray(parsed)
+                && parsed.some((player) =>
+                    player
+                    && typeof player === 'object'
+                    && ('first_name' in player || 'last_name' in player)
+                )
+            ) {
+                return parsed as SidearmEmbeddedPlayer[];
+            }
+        } catch {
+            // Keep searching for the next possible players payload.
+        }
+
+        startIndex = html.indexOf(key, startIndex + key.length);
+    }
+
+    return null;
+}
+
+function findMatchingBracketIndex(text: string, startIndex: number): number {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = startIndex; i < text.length; i += 1) {
+        const char = text[i];
+
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (char === '\\') {
+            escaped = true;
+            continue;
+        }
+
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+
+        if (inString) {
+            continue;
+        }
+
+        if (char === '[') {
+            depth += 1;
+        } else if (char === ']') {
+            depth -= 1;
+            if (depth === 0) {
+                return i;
+            }
+        }
+    }
+
+    return -1;
+}
+
+function mapEmbeddedSidearmPlayer(player: SidearmEmbeddedPlayer): RosterPlayer | null {
+    const fullName = [player.first_name?.trim(), player.last_name?.trim()]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+    if (!fullName) {
+        return null;
+    }
+
+    const nameParts = splitName(fullName);
+    const number = player.jersey_number_2?.trim() || player.jersey_number?.trim() || '';
+    const btRaw = [player.custom1, player.custom2, player.custom3]
+        .map(value => value?.trim() || '')
+        .find(value => /^[a-z]\/[a-z]$/i.test(value)) || '';
+    const [bats = '', throws_ = ''] = btRaw.split('/').map(value => value.trim());
+    const hometownFull = [player.hometown?.trim(), player.highschool?.trim()]
+        .filter(Boolean)
+        .join(' / ');
+    const locationParts = parseHometown(hometownFull);
+    const hometownDisplay = locationParts.state
+        ? `${locationParts.city}, ${locationParts.state}`
+        : locationParts.city;
+
+    return {
+        number,
+        firstName: nameParts.firstName,
+        lastName: nameParts.lastName,
+        position: abbreviatePosition(player.position_short?.trim() || player.position_long?.trim() || ''),
+        bats,
+        throws: throws_,
+        hometown: hometownDisplay,
+        state: locationParts.state,
+        height: formatEmbeddedHeight(player.height_feet, player.height_inches),
+        weight: player.weight != null ? String(player.weight).trim() : '',
+        year: yearToNumber(player.academic_year_short?.trim() || String(player.academic_year_number ?? '').trim()),
+        age: '',
+    };
+}
+
+function buildRosterPlayer(input: {
+    fullName: string;
+    number: string;
+    position: string;
+    bats: string;
+    throws: string;
+    hometown: string;
+    highSchool: string;
+    height: string;
+    weight: string;
+    year: string;
+}): RosterPlayer | null {
+    if (!input.fullName) {
+        return null;
+    }
+
+    const nameParts = splitName(input.fullName);
+    const hometownFull = [input.hometown, input.highSchool].filter(Boolean).join(' / ');
+    const locationParts = parseHometown(hometownFull);
+    const hometownDisplay = locationParts.state
+        ? `${locationParts.city}, ${locationParts.state}`
+        : locationParts.city;
+
+    return {
+        number: input.number,
+        firstName: nameParts.firstName,
+        lastName: nameParts.lastName,
+        position: abbreviatePosition(input.position),
+        bats: input.bats,
+        throws: input.throws,
+        hometown: hometownDisplay,
+        state: locationParts.state,
+        height: formatHeight(input.height),
+        weight: input.weight,
+        year: yearToNumber(input.year),
+        age: '',
+    };
+}
+
+function cleanText(value: string): string {
+    return value.replace(/\s+/g, ' ').trim();
+}
+
+function stripFieldLabel(value: string, labels: string[]): string {
+    let cleaned = value.trim();
+
+    for (const label of labels) {
+        const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        cleaned = cleaned.replace(new RegExp(`^${escaped}\\s*:?\\s*`, 'i'), '').trim();
+    }
+
+    return cleaned;
+}
+
+function normalizeWeight(value: string): string {
+    return value.replace(/\s*lbs?\.?$/i, '').trim();
+}
+
+function normalizePositionValue(value: string): string {
+    const cleaned = value.trim();
+    if (!cleaned) {
+        return '';
+    }
+
+    const trailingShortCode = cleaned.match(/([A-Z]{1,4}(?:\/[A-Z]{1,4})*)$/);
+    if (trailingShortCode) {
+        return trailingShortCode[1];
+    }
+
+    return cleaned;
+}
+
+function isBtLike(value: string): boolean {
+    return /^[a-z]\/[a-z]$/i.test(value.trim());
+}
+
+function isPositionLike(value: string): boolean {
+    const normalized = value.trim();
+    if (!normalized) return false;
+    if (isBtLike(normalized)) return false;
+    if (/\d/.test(normalized)) return false;
+    return /^[a-z/ -]+$/i.test(normalized);
+}
+
+function formatEmbeddedHeight(feet: string | number | null | undefined, inches: string | number | null | undefined): string {
+    if (feet == null || feet === '') {
+        return '';
+    }
+
+    const feetStr = String(feet).trim();
+    const inchesStr = inches == null ? '0' : String(inches).trim();
+    return `${feetStr}'${inchesStr}"`;
+}
+
+function sortRosterPlayers(players: RosterPlayer[]): RosterPlayer[] {
     players.sort((a, b) => {
         const toSortKey = (num: string) => {
             if (num === '0') return 100;
