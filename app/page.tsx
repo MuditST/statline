@@ -25,6 +25,8 @@ import type { RosterPlayer } from '@/lib/roster/extractor';
 import type { RosterResponse } from '@/app/api/roster/route';
 import type { ConfiguredSchoolOption } from '@/lib/schools/types';
 
+const HELP_URL = 'https://docs.google.com/document/d/1SjutV_3gqJvn_KHDhBg7iH-Ac9vCDufdMfwqpsvKss8/edit?usp=sharing';
+
 export default function Home() {
     // Selection state
     const [selectedSport, setSelectedSport] = useState<SportType>('baseball');
@@ -299,7 +301,7 @@ export default function Home() {
                                 </CardTitle>
 
                                 {/* Custom URLs Toggle */}
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
                                     <Label htmlFor="custom-urls" className="text-sm text-muted-foreground">
                                         Custom URLs
                                     </Label>
@@ -316,6 +318,15 @@ export default function Home() {
                                             <p>Enable to enter custom roster and stats URLs</p>
                                         </TooltipContent>
                                     </Tooltip>
+                                    <Button asChild variant="secondary" size="sm" className="h-8 px-2 ml-1 text-sm text-muted-foreground hover:text-foreground">
+                                        <a
+                                            href={HELP_URL}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >
+                                            Help
+                                        </a>
+                                    </Button>
                                     <ModeToggle />
                                 </div>
                             </CardHeader>
